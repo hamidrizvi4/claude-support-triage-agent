@@ -5,13 +5,16 @@
  *
  * Usage: npm run ingest-docs
  */
-import "dotenv/config";
+import { config } from "dotenv";
+config({ path: ".env.local" });
 import { getSupabaseAdmin } from "../src/lib/supabase";
 import { embed } from "../src/lib/embeddings";
 
 const CHUNK_WORD_LIMIT = 375; // ~500 tokens at ~0.75 words/token
+// docs.claude.com now redirects to platform.claude.com (same Claude API docs,
+// renamed domain) — point at it directly so the sitemap URLs actually match `base`.
 const SOURCES = [
-  { base: "https://docs.claude.com", sitemap: "https://docs.claude.com/sitemap.xml", kind: "mintlify" as const },
+  { base: "https://platform.claude.com", sitemap: "https://platform.claude.com/sitemap.xml", kind: "mintlify" as const },
   { base: "https://support.claude.com", sitemap: "https://support.claude.com/sitemap.xml", kind: "zendesk" as const },
 ];
 
@@ -94,8 +97,12 @@ async function main() {
       console.warn(`Could not fetch sitemap for ${source.base}, skipping`);
       continue;
     }
-    const urls = extractSitemapUrls(sitemapXml).filter((u) => u.startsWith(source.base));
-    console.log(`${source.base}: found ${urls.length} pages`);
+    // Every page is published in ~12 locales under an /en/, /de/, /ja/, etc.
+    // path segment — English only, since the ticket corpus is English.
+    const urls = extractSitemapUrls(sitemapXml)
+      .filter((u) => u.startsWith(source.base))
+      .filter((u) => u.includes("/en/"));
+    console.log(`${source.base}: found ${urls.length} English pages`);
 
     for (const url of urls) {
       const pageUrl = source.kind === "mintlify" ? `${url}.md` : url;
@@ -109,7 +116,14 @@ async function main() {
       const chunks = chunkContent(text);
       if (chunks.length === 0) continue;
 
-      const embeddings = await embed(chunks.map((c) => c.content));
+      let embeddings: number[][];
+      try {
+        embeddings = await embed(chunks.map((c) => c.content));
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`  embed failed for ${url}: ${message}`);
+        continue;
+      }
       const rows = chunks.map((c, i) => ({
         source_url: url,
         title,

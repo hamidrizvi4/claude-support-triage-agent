@@ -12,12 +12,19 @@
     "run-triage": "tsx scripts/run-triage.ts",
     "test:routing": "tsx src/lib/agent/routing.selftest.ts"
   },
+  "browserslist": [
+    "last 2 Chrome versions",
+    "last 2 Firefox versions",
+    "last 2 Safari versions",
+    "last 2 Edge versions"
+  ],
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.113.0",
     "@supabase/supabase-js": "^2",
     "next": "16.2.11",
+    "openai": "^6.49.0",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "server-only": "^0.0.1"
   },
   "devDependencies": {
     "@types/node": "^20",

@@ -1,0 +1,478 @@
+/* Reporting dashboard — "control room, not a spreadsheet".
+   Elevation is declared once, with a border. No shadows anywhere. */
+
+.page {
+  padding: var(--space-8);
+  max-width: 1180px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+/* Entrance: opacity + 8px rise, 250ms, staggered 40ms per block. */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 250ms var(--ease-out) both;
+}
+
+/* globals.css shortens the duration but not the delay — without this the page
+   would sit invisible through the stagger. Render at rest instead. */
+@media (prefers-reduced-motion: reduce) {
+  .rise {
+    animation: none;
+  }
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  max-width: 68ch;
+}
+
+/* ── Run integrity strip ─────────────────────────────────── */
+/* Deliberately not a card: full-bleed band, hairline rules, no radius on the
+   meter. This is the page's one named kicker. */
+
+.integrity {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.integrityTop {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.integrityLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.integrityRate {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.integrityRate span {
+  color: var(--text-secondary);
+}
+
+.meter {
+  display: flex;
+  width: 100%;
+  height: 6px;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.meterSegment {
+  height: 100%;
+}
+
+.segCompleted {
+  background: var(--resolve);
+}
+
+.segIncomplete {
+  background: var(--escalate);
+}
+
+.segExcluded {
+  /* Not an agent outcome — reads as absence, not as a third result. */
+  background: var(--border-strong);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4) var(--space-6);
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.legendCount {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.note {
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+  max-width: 78ch;
+}
+
+.note code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+/* ── KPI row ─────────────────────────────────────────────── */
+
+.kpiRow {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+/* Composed with the shared `glassPanel` class (globals.css) for the
+   translucent/blur/specular shell — border-radius stays here so its
+   ::before specular mask has something to inherit. */
+.kpi {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-4) var(--space-6);
+  border-radius: var(--radius-lg);
+}
+
+.kpiLabel {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.kpiValue {
+  font-family: var(--font-mono);
+  font-size: 28px;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+}
+
+.kpiResolve {
+  color: var(--resolve);
+}
+
+.kpiEscalate {
+  color: var(--escalate);
+}
+
+.kpiCritical {
+  color: var(--critical);
+}
+
+.kpiFoot {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ── Sections ────────────────────────────────────────────── */
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.sectionTitle {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.sectionMeta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.chartGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4);
+}
+
+/* ── Breakdown chart ─────────────────────────────────────── */
+
+/* Composed with the shared `glassPanel` class — see .kpi comment above. */
+.chart {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  border-radius: var(--radius-lg);
+}
+
+.chartTitle {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.bars {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.barRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  align-items: baseline;
+  column-gap: var(--space-3);
+  row-gap: var(--space-2);
+}
+
+.barLabel {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.barCount {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.barTrack {
+  grid-column: 1 / -1;
+  /* Spans are inline by default — without this the 6px height is ignored.
+     --surface-raised is now equal to --surface (both opaque white), so a
+     track can't be defined by that contrast anymore now that the chart
+     card is glass, not solid — border-strong gives it a visible track
+     against both the glass card and the light canvas behind it. */
+  display: block;
+  height: 6px;
+  background: var(--border-strong);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.barFill {
+  display: block;
+  height: 100%;
+  background: var(--escalate);
+  border-radius: 3px;
+}
+
+.empty {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ── Doc gaps ────────────────────────────────────────────── */
+/* Critical tint lives in the border and the score, never a fat accent bar. */
+
+/* Composed with `glassPanel` like the KPI/chart cards, but its border stays
+   critical-tinted rather than neutral glass-border — that's the whole reason
+   this section reads as "needs attention" instead of an ordinary card.
+   color-mix keeps it a border-strength tint without a dedicated token. */
+.docGaps {
+  border-color: color-mix(in srgb, var(--critical) 35%, transparent);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.docGapsHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.docGapsTitleWrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.criticalDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: var(--critical);
+  flex: none;
+}
+
+.docGapsRate {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--critical-tint);
+  color: var(--critical);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.docGapRow {
+  display: grid;
+  grid-template-columns: 56px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+
+.docGapRow:last-child {
+  border-bottom: none;
+}
+
+.docGapEmpty {
+  padding: var(--space-4);
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.docGapScore {
+  font-family: var(--font-mono);
+  font-size: 17px;
+  letter-spacing: -0.02em;
+  color: var(--critical);
+}
+
+.docGapScoreOk {
+  color: var(--escalate);
+}
+
+.docGapSubject {
+  font-size: 14px;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docGapCategory {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ── Tool usage ──────────────────────────────────────────── */
+
+.tools {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.tool {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-4);
+  background: var(--surface);
+}
+
+.toolName {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toolCount {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+/* ── Responsive ──────────────────────────────────────────── */
+
+@media (max-width: 1000px) {
+  .kpiRow {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .chartGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 860px) {
+  .page {
+    padding: var(--space-6) var(--space-4);
+    gap: var(--space-6);
+  }
+}
+
+@media (max-width: 560px) {
+  .kpiRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .docGapRow {
+    grid-template-columns: 48px minmax(0, 1fr);
+    row-gap: var(--space-1);
+  }
+
+  .docGapCategory {
+    grid-column: 2;
+  }
+}

@@ -1,13 +1,14 @@
 /**
- * Runs the Claude tool-use loop for a single ticket until it calls
+ * Runs the tool-use loop for a single ticket until the model calls
  * submit_resolution (or the turn budget runs out). Every tool call —
  * including submit_resolution itself — is logged to tool_calls.
  */
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from "openai";
 import { getSupabaseAdmin } from "../supabase";
 import { TOOLS, searchDocs, checkStatus, checkPricing, lookupAccount } from "./tools";
 
-const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
+// Fixed per CLAUDE.md — free, purpose-built for agent orchestration/tool calling.
+const MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
 const MAX_TURNS = 8;
 
 const SYSTEM_PROMPT = `You are a support triage agent for Anthropic's Claude API developer support
@@ -36,10 +37,10 @@ export type Ticket = {
   account_id: string | null;
 };
 
-function getAnthropicClient() {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("ANTHROPIC_API_KEY must be set");
-  return new Anthropic({ apiKey });
+function getOpenRouterClient() {
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) throw new Error("OPENROUTER_API_KEY must be set");
+  return new OpenAI({ apiKey, baseURL: "https://openrouter.ai/api/v1" });
 }
 
 async function logToolCall(ticketId: string, toolName: string, input: unknown, output: unknown) {
@@ -56,8 +57,9 @@ const HANDLERS: Record<string, (input: Record<string, unknown>) => Promise<unkno
 };
 
 export async function runAgent(ticket: Ticket): Promise<Resolution> {
-  const anthropic = getAnthropicClient();
-  const messages: Anthropic.MessageParam[] = [
+  const openai = getOpenRouterClient();
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    { role: "system", content: SYSTEM_PROMPT },
     {
       role: "user",
       content: `New support ticket.\n\nSubject: ${ticket.subject}\n\nBody:\n${ticket.body}\n\n${
@@ -67,40 +69,57 @@ export async function runAgent(ticket: Ticket): Promise<Resolution> {
   ];
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
-    const response = await anthropic.messages.create({
+    const isLastTurn = turn === MAX_TURNS - 1;
+    const response = await openai.chat.completions.create({
       model: MODEL,
       max_tokens: 2048,
-      system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
       tools: TOOLS,
+      // Force a resolution on the final turn instead of letting the loop
+      // exhaust the budget and throw. NOTE: OpenRouter's Auto Exacto routing
+      // (higher tool-calling accuracy) is currently limited to a short list of
+      // models (GLM-4.7/5, DeepSeek V3.2, gpt-oss-120b) that doesn't include
+      // nemotron-3-ultra, and the explicit `:exacto` variant isn't offered on
+      // `:free` slugs — so this model gets no tool-calling reliability boost.
+      // Expect a non-trivial rate of forced-tool-call misses on this free model.
+      ...(isLastTurn ? { tool_choice: { type: "function" as const, function: { name: "submit_resolution" } } } : {}),
       messages,
     });
 
-    messages.push({ role: "assistant", content: response.content });
+    const message = response.choices?.[0]?.message;
+    if (!message) throw new Error(`OpenRouter response had no choices: ${JSON.stringify(response)}`);
+    messages.push({ role: "assistant", content: message.content, tool_calls: message.tool_calls });
 
-    const toolUses = response.content.filter((b): b is Anthropic.ToolUseBlock => b.type === "tool_use");
-    const submit = toolUses.find((b) => b.name === "submit_resolution");
+    // TOOLS only registers `type: "function"` entries, so every call back is one.
+    const toolCalls = (message.tool_calls ?? []).filter(
+      (tc): tc is OpenAI.Chat.Completions.ChatCompletionMessageFunctionToolCall => tc.type === "function"
+    );
+    const submit = toolCalls.find((tc) => tc.function.name === "submit_resolution");
     if (submit) {
-      await logToolCall(ticket.id, "submit_resolution", submit.input, null);
-      return submit.input as Resolution;
+      const args = JSON.parse(submit.function.arguments) as Resolution;
+      // Free model doesn't reliably return well-typed numbers for these two —
+      // coerce rather than let a bad value silently poison confidence as NaN.
+      args.retrieval_score = Number(args.retrieval_score) || 0;
+      args.self_certainty = Number(args.self_certainty) || 0;
+      await logToolCall(ticket.id, "submit_resolution", args, null);
+      return args;
     }
 
-    if (toolUses.length === 0) break;
+    if (toolCalls.length === 0) break;
 
-    const resultBlocks: Anthropic.ToolResultBlockParam[] = [];
-    for (const use of toolUses) {
-      const handler = HANDLERS[use.name];
+    for (const call of toolCalls) {
+      const input = JSON.parse(call.function.arguments) as Record<string, unknown>;
+      const handler = HANDLERS[call.function.name];
       try {
-        if (!handler) throw new Error(`unknown tool ${use.name}`);
-        const output = await handler(use.input as Record<string, unknown>);
-        await logToolCall(ticket.id, use.name, use.input, output);
-        resultBlocks.push({ type: "tool_result", tool_use_id: use.id, content: JSON.stringify(output) });
+        if (!handler) throw new Error(`unknown tool ${call.function.name}`);
+        const output = await handler(input);
+        await logToolCall(ticket.id, call.function.name, input, output);
+        messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(output) });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        await logToolCall(ticket.id, use.name, use.input, { error: message });
-        resultBlocks.push({ type: "tool_result", tool_use_id: use.id, content: message, is_error: true });
+        await logToolCall(ticket.id, call.function.name, input, { error: message });
+        messages.push({ role: "tool", tool_call_id: call.id, content: message });
       }
     }
-    messages.push({ role: "user", content: resultBlocks });
   }
 
   throw new Error(`agent did not call submit_resolution within ${MAX_TURNS} turns`);

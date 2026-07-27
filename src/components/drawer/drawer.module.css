@@ -1,0 +1,741 @@
+/* One stylesheet for the whole drawer unit — it's a single cohesive surface,
+   not five independent widgets. */
+
+/* ── Shell ─────────────────────────────────────────────────────────────── */
+
+/* Enter/exit run as keyframes, not state-toggled transitions, so the panel
+   never needs an effect to flip a class one frame after mount. */
+@keyframes scrimIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes scrimOut {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes panelIn {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes panelOut {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+}
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  /* A light theme reads a full-black scrim as a jarring wash; a soft
+     ink-tinted dim is enough to pull focus onto the glass panel. */
+  background: rgb(20 23 26 / 0.32);
+}
+
+.scrimEnter {
+  animation: scrimIn 250ms var(--ease-out) both;
+}
+
+.scrimExit {
+  animation: scrimOut 180ms var(--ease-out) both;
+}
+
+/* Background/border/blur/shadow come from the composed `glassPanel` global
+   class (see TicketDrawer.tsx) — this rule only owns position and layout.
+   `--border-visible` is derived once here (border/border-strong are tuned as
+   near-invisible hairlines on this light palette — fine for whisper dividers,
+   not enough for a chip/button that needs to read as a distinct edge) and
+   inherited by everything below that needs an actual visible boundary. */
+.panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 41;
+  display: flex;
+  flex-direction: column;
+  width: 480px;
+  max-width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  --border-visible: color-mix(in srgb, var(--border-strong) 60%, var(--text-primary) 40%);
+}
+
+/* Exit is faster than entry — 250ms in, 180ms out. */
+.panelEnter {
+  animation: panelIn 250ms var(--ease-out) both;
+}
+
+.panelExit {
+  animation: panelOut 180ms var(--ease-out) both;
+}
+
+.header {
+  flex: none;
+  padding: var(--space-6);
+  border-bottom: 1px solid var(--border);
+}
+
+.headerTop {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.subject {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  text-wrap: balance;
+}
+
+.close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.close:active {
+  transform: scale(0.97);
+  transition: transform 120ms var(--ease-out);
+}
+
+@media (hover: hover) {
+  .close:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+  }
+}
+
+.headerMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.confidenceBig {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin-left: auto;
+}
+
+.toneResolve {
+  color: var(--resolve);
+}
+.toneEscalate {
+  color: var(--escalate);
+}
+.toneCritical {
+  color: var(--critical);
+}
+.toneMuted {
+  color: var(--text-secondary);
+}
+
+/* ── Pills ─────────────────────────────────────────────────────────────── */
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px var(--space-2);
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* --surface-raised == --surface on this light palette (both solid white),
+   so a neutral chip needs its own border to read as a chip rather than
+   disappearing into the panel behind it. */
+.pillNeutral {
+  background: var(--surface-raised);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-visible);
+}
+
+.pillResolve {
+  background: var(--resolve-tint);
+  color: var(--resolve);
+}
+
+.pillEscalate {
+  background: var(--escalate-tint);
+  color: var(--escalate);
+}
+
+.pillCritical {
+  background: var(--critical-tint);
+  color: var(--critical);
+}
+
+/* ── Body / sections ───────────────────────────────────────────────────── */
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.sectionHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.sectionTitle {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.sectionNote {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.ticketBody {
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Honest empty/degraded states — never an empty box. */
+.notice {
+  padding: var(--space-4);
+  border: 1px dashed var(--border-visible);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.noticeTitle {
+  display: block;
+  margin-bottom: var(--space-1);
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.noticeCode {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+/* ── Reasoning trace ───────────────────────────────────────────────────── */
+
+.trace {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.traceEntry {
+  border-left: 2px solid var(--border-visible);
+  padding-left: var(--space-3);
+}
+
+.traceHead {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  width: 100%;
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.traceIndex {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.traceTime {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.traceCaret {
+  font-size: 9px;
+  color: var(--text-secondary);
+}
+
+.traceError {
+  color: var(--critical);
+}
+
+/* Density toggle, not a spatial transition — instant, no animation. */
+.traceJson {
+  margin-top: var(--space-2);
+  padding: var(--space-3);
+  background: var(--canvas);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.traceJsonLabel {
+  display: block;
+  margin-bottom: var(--space-1);
+  color: var(--text-secondary);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.traceJson + .traceJson {
+  margin-top: var(--space-2);
+}
+
+/* ── Confidence breakdown — the centrepiece visual ─────────────────────── */
+
+/* The brief calls this the single most product-relevant visual in the UI —
+   a plain hairline undersells it, so it gets the same visible boundary as
+   an interactive chip rather than the whisper-subtle `--border`. */
+.confidence {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-visible);
+  border-radius: var(--radius-md);
+}
+
+.formula {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.formulaValue {
+  color: var(--text-primary);
+}
+
+.track {
+  position: relative;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--canvas);
+  overflow: hidden;
+  display: flex;
+}
+
+.segRetrieval {
+  height: 100%;
+  background: var(--tone);
+}
+
+.segCertainty {
+  height: 100%;
+  background: color-mix(in srgb, var(--tone) 45%, transparent);
+}
+
+.threshold {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--text-primary);
+}
+
+.thresholdRow {
+  position: relative;
+  height: 14px;
+}
+
+.thresholdLabel {
+  position: absolute;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.swatch {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.swatchRetrieval {
+  background: var(--tone);
+}
+
+.swatchCertainty {
+  background: color-mix(in srgb, var(--tone) 45%, transparent);
+  border: 1px solid var(--border-visible);
+}
+
+.legendValue {
+  color: var(--text-primary);
+}
+
+.verdict {
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-secondary);
+}
+
+.verdictStrong {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+/* ── Draft + citations ─────────────────────────────────────────────────── */
+
+.draft {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+
+.draftP {
+  white-space: pre-wrap;
+}
+
+.draftP + .draftP,
+.draftP + .draftPre,
+.draftPre + .draftP {
+  margin-top: var(--space-3);
+}
+
+.draftH {
+  margin-top: var(--space-4);
+  margin-bottom: var(--space-2);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.draftH:first-child {
+  margin-top: 0;
+}
+
+.draftPre {
+  padding: var(--space-3);
+  background: var(--canvas);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  overflow-x: auto;
+  white-space: pre;
+}
+
+.code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--canvas);
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  color: var(--text-primary);
+}
+
+.link {
+  color: var(--text-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--border-visible);
+}
+
+/* Citation chip — inline pill in the prose flow. Same surface-raised-on-
+   surface flattening as pillNeutral, same fix: a real border. */
+.cite {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px var(--space-2);
+  border-radius: 99px;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-visible);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  vertical-align: baseline;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.citeMarker {
+  color: var(--resolve);
+}
+
+.tooltip {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 0;
+  z-index: 2;
+  width: max-content;
+  max-width: 280px;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-visible);
+  border-radius: var(--radius-sm);
+  background: var(--surface-raised);
+  /* A floating popover needs to read as elevated, which a light theme can no
+     longer imply just by being a shade lighter than what's behind it. */
+  box-shadow: 0 4px 16px -4px rgba(20, 23, 26, 0.18);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: normal;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms var(--ease-out);
+}
+
+.tooltipUrl {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+@media (hover: hover) {
+  .cite:hover {
+    background: var(--surface-hover);
+    color: var(--text-primary);
+  }
+
+  .cite:hover .tooltip,
+  .cite:focus-visible .tooltip {
+    opacity: 1;
+  }
+}
+
+.cite:focus-visible .tooltip {
+  opacity: 1;
+}
+
+.sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.sourcesLabel {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  align-self: center;
+}
+
+.editor {
+  width: 100%;
+  min-height: 260px;
+  padding: var(--space-3);
+  background: var(--canvas);
+  border: 1px solid var(--border-visible);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.7;
+  resize: vertical;
+}
+
+.editorHint {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* ── Footer action bar ─────────────────────────────────────────────────── */
+
+.footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-6);
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+}
+
+.footerGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+}
+
+.btn {
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease,
+    opacity 150ms ease;
+}
+
+/* Press feedback on every button, no exceptions. */
+.btn:active:not(:disabled) {
+  transform: scale(0.97);
+  transition: transform 120ms var(--ease-out);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btnGhost {
+  border: 1px solid var(--border-visible);
+  color: var(--text-secondary);
+}
+
+/* Same surface-raised-on-surface flattening as the chips above: the footer
+   is solid --surface, so this button needs its own edge to read as a button. */
+.btnSecondary {
+  background: var(--surface-raised);
+  border: 1px solid var(--border-visible);
+  color: var(--text-primary);
+}
+
+.btnPrimary {
+  background: var(--resolve);
+  color: var(--canvas);
+  font-weight: 600;
+}
+
+@media (hover: hover) {
+  .btnGhost:hover:not(:disabled) {
+    border-color: var(--critical);
+    color: var(--critical);
+  }
+  .btnSecondary:hover:not(:disabled) {
+    background: var(--surface-hover);
+  }
+  .btnPrimary:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--resolve) 88%, var(--text-primary));
+  }
+}
+
+.footerNote {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.error {
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--critical-tint);
+  color: var(--critical);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.reviewedBanner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12px;
+  color: var(--resolve);
+}
+
+@media (max-width: 560px) {
+  .panel {
+    width: 100vw;
+  }
+
+  .header,
+  .body,
+  .footer {
+    padding-left: var(--space-4);
+    padding-right: var(--space-4);
+  }
+}

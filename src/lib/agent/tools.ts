@@ -3,82 +3,94 @@
  * orchestrator is the single place that logs calls to tool_calls, so no
  * tool invocation here is silent.
  */
-import type Anthropic from "@anthropic-ai/sdk";
+import type OpenAI from "openai";
 import { embed } from "../embeddings";
 import { getSupabaseAdmin } from "../supabase";
 
-export const TOOLS: Anthropic.Tool[] = [
+export const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
-    name: "search_docs",
-    description:
-      "Search Anthropic's public Claude API documentation for content relevant to the developer's question. Returns the most relevant chunks with source URLs.",
-    input_schema: {
-      type: "object",
-      properties: {
-        query: { type: "string", description: "Search query capturing the developer's question" },
-        top_k: { type: "integer", default: 5 },
-      },
-      required: ["query"],
-    },
-  },
-  {
-    name: "check_status",
-    description:
-      "Check Anthropic's live status page for active incidents affecting the Claude API, Console, or specific models. Call this whenever the ticket mentions errors, timeouts, or degraded behavior.",
-    input_schema: { type: "object", properties: {} },
-  },
-  {
-    name: "check_pricing",
-    description:
-      "Look up current pricing for a specific Claude model from grounded documentation. Never answer pricing from memory — always call this.",
-    input_schema: {
-      type: "object",
-      properties: { model: { type: "string" } },
-      required: ["model"],
-    },
-  },
-  {
-    name: "lookup_account",
-    description: "Look up a (mocked) account's plan tier, current usage, and rate limits.",
-    input_schema: {
-      type: "object",
-      properties: { account_id: { type: "string" } },
-      required: ["account_id"],
-    },
-  },
-  {
-    name: "submit_resolution",
-    description:
-      "Submit the final structured resolution for this ticket. Always call this last, exactly once, after gathering whatever context you need.",
-    input_schema: {
-      type: "object",
-      properties: {
-        category: {
-          type: "string",
-          enum: [
-            "technical_api_error",
-            "billing",
-            "feature_question",
-            "account_access",
-            "security_abuse",
-            "sales_enterprise",
-            "bug_report",
-          ],
+    type: "function",
+    function: {
+      name: "search_docs",
+      description:
+        "Search Anthropic's public Claude API documentation for content relevant to the developer's question. Returns the most relevant chunks with source URLs.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Search query capturing the developer's question" },
+          top_k: { type: "integer", default: 5 },
         },
-        draft_response: { type: "string" },
-        citations: {
-          type: "array",
-          items: { type: "object", properties: { source_url: { type: "string" }, title: { type: "string" } } },
-        },
-        retrieval_score: { type: "number", description: "0-1, how well the retrieved docs matched the question" },
-        self_certainty: { type: "number", description: "0-1, your own confidence the draft is correct and complete" },
-        escalation_reason: { type: ["string", "null"] },
+        required: ["query"],
       },
-      required: ["category", "draft_response", "citations", "retrieval_score", "self_certainty"],
     },
-    // Last tool def — the cache breakpoint covers the whole (identical,
-    // per-ticket) tool array above it too.
-    cache_control: { type: "ephemeral" },
+  },
+  {
+    type: "function",
+    function: {
+      name: "check_status",
+      description:
+        "Check Anthropic's live status page for active incidents affecting the Claude API, Console, or specific models. Call this whenever the ticket mentions errors, timeouts, or degraded behavior.",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "check_pricing",
+      description:
+        "Look up current pricing for a specific Claude model from grounded documentation. Never answer pricing from memory — always call this.",
+      parameters: {
+        type: "object",
+        properties: { model: { type: "string" } },
+        required: ["model"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "lookup_account",
+      description: "Look up a (mocked) account's plan tier, current usage, and rate limits.",
+      parameters: {
+        type: "object",
+        properties: { account_id: { type: "string" } },
+        required: ["account_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "submit_resolution",
+      description:
+        "Submit the final structured resolution for this ticket. Always call this last, exactly once, after gathering whatever context you need.",
+      parameters: {
+        type: "object",
+        properties: {
+          category: {
+            type: "string",
+            enum: [
+              "technical_api_error",
+              "billing",
+              "feature_question",
+              "account_access",
+              "security_abuse",
+              "sales_enterprise",
+              "bug_report",
+            ],
+          },
+          draft_response: { type: "string" },
+          citations: {
+            type: "array",
+            items: { type: "object", properties: { source_url: { type: "string" }, title: { type: "string" } } },
+          },
+          retrieval_score: { type: "number", description: "0-1, how well the retrieved docs matched the question" },
+          self_certainty: { type: "number", description: "0-1, your own confidence the draft is correct and complete" },
+          escalation_reason: { type: ["string", "null"] },
+        },
+        required: ["category", "draft_response", "citations", "retrieval_score", "self_certainty"],
+      },
+    },
   },
 ];
 

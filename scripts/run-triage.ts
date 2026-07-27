@@ -5,7 +5,8 @@
  *
  * Usage: npm run run-triage
  */
-import "dotenv/config";
+import { config } from "dotenv";
+config({ path: ".env.local" });
 import { getSupabaseAdmin } from "../src/lib/supabase";
 import { runAgent, type Resolution, type Ticket } from "../src/lib/agent/orchestrator";
 import { route, type Route } from "../src/lib/agent/routing";
@@ -56,14 +57,15 @@ async function persist(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   ticket: TicketRow,
   resolution: Resolution,
-  decision: Route
+  decision: Route,
+  draftCategory: string | null
 ) {
   const { error: draftError } = await supabase.from("draft_responses").insert({
     ticket_id: ticket.id,
     draft_text: resolution.draft_response,
     citations: resolution.citations,
     confidence: decision.confidence,
-    category: resolution.category,
+    category: draftCategory,
     escalation_reason: decision.reason,
     retrieval_score: resolution.retrieval_score,
     self_certainty: resolution.self_certainty,
@@ -100,9 +102,11 @@ async function main() {
 
     let resolution: Resolution;
     let decision: Route;
+    let draftCategory: string | null;
     try {
       resolution = await runAgent(ticket);
       decision = route(resolution.category, resolution.retrieval_score, resolution.self_certainty);
+      draftCategory = resolution.category;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.error(`  ! agent failed: ${message}`);
@@ -115,9 +119,13 @@ async function main() {
         escalation_reason: `agent_error:${message}`,
       };
       decision = { status: "escalated", confidence: 0, reason: `agent_error:${message}` };
+      // ticket.category is the ticket-generation enum (informational/billing/...),
+      // not draft_responses' resolution-category enum — leave it null rather than
+      // fail the check constraint with a category the agent never actually produced.
+      draftCategory = null;
     }
 
-    await persist(supabase, ticket, resolution, decision);
+    await persist(supabase, ticket, resolution, decision, draftCategory);
     tally(summary, resolution.category, decision);
     console.log(`  -> ${decision.status}${decision.reason ? ` (${decision.reason})` : ""} confidence=${decision.confidence.toFixed(2)}`);
   }

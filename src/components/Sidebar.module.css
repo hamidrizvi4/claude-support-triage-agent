@@ -1,0 +1,167 @@
+/* Composed with the shared `glassPanel` class from globals.css for the
+   translucent/blur/specular treatment; this overrides its border and shadow
+   for a full-height edge rather than a floating card. */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  padding: var(--space-6) 0;
+  min-width: 0;
+  border: none;
+  border-right: 1px solid var(--glass-border);
+  border-radius: 0;
+  box-shadow: 1px 0 0 rgba(20, 23, 26, 0.02);
+}
+
+.sidebar::before {
+  border-radius: 0;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 0 var(--space-6);
+}
+
+.mark {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+}
+
+.brandText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.brandName {
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.brandSub {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.navLabel {
+  padding: 0 var(--space-6) var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-tertiary);
+}
+
+.item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-6);
+  /* Active state is a 2px left rule, never a filled pill. */
+  border-left: 2px solid transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+
+.item svg {
+  flex: none;
+  opacity: 0.75;
+}
+
+.itemActive {
+  border-left-color: var(--text-primary);
+  color: var(--text-primary);
+}
+
+.itemActive svg {
+  opacity: 1;
+}
+
+@media (hover: hover) {
+  .item:hover {
+    color: var(--text-primary);
+  }
+}
+
+.footer {
+  margin-top: auto;
+  padding: 0 var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.footerRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-tertiary);
+}
+
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 99px;
+  background: var(--resolve);
+  flex: none;
+}
+
+@media (max-width: 860px) {
+  .sidebar {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-4);
+    padding: var(--space-3) var(--space-4);
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    overflow-x: auto;
+  }
+
+  .brand {
+    padding: 0;
+  }
+
+  .brandSub,
+  .navLabel,
+  .footer {
+    display: none;
+  }
+
+  .nav {
+    flex-direction: row;
+    gap: var(--space-1);
+  }
+
+  .item {
+    padding: var(--space-2) var(--space-3);
+    border-left: none;
+    border-bottom: 2px solid transparent;
+  }
+
+  .itemActive {
+    border-left-color: transparent;
+    border-bottom-color: var(--text-primary);
+  }
+}

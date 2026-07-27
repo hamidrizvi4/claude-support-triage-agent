@@ -1,0 +1,471 @@
+/* Screen 1 — Review Queue. One module for the whole screen; these components
+   are a single cohesive unit, not independently reusable pieces. */
+
+.screen {
+  /* Shared column track — the column header and every row must agree exactly. */
+  --queue-cols: minmax(0, 1fr) 168px 216px 58px 66px;
+
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+/* ---------- Header ---------- */
+
+/* Composed with the shared `glassPanel` class (globals.css) — content
+   scrolling underneath a sticky, blurred bar is the one place in this screen
+   translucency earns its keep; the title/badge/chips are chrome, not data. */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: var(--space-8) var(--space-8) 0;
+  border: none;
+  border-bottom: 1px solid var(--glass-border);
+  border-radius: 0;
+  box-shadow: 0 1px 0 rgba(20, 23, 26, 0.02), 0 8px 24px -16px rgba(20, 23, 26, 0.12);
+}
+
+.header::before {
+  border-radius: 0;
+}
+
+.titleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--escalate-tint);
+  color: var(--escalate);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.badgeWord {
+  font-family: var(--font-ui);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  opacity: 0.85;
+}
+
+.filters {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-6) 0 var(--space-4);
+}
+
+.filterGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.filterLabel {
+  flex: none;
+  width: 68px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+/* Unselected chips carry the `glassPanel` class (composed in FilterChips.tsx)
+   for the translucent float; a small pill doesn't want a card-scale shadow,
+   so that's toned down here. Selected is a solid fill, not more glass —
+   "on" needs to read unambiguously against a translucent "off" neighbor. */
+.chip {
+  padding: 3px var(--space-3);
+  border-radius: 99px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+/* :global() — glassPanel is the literal, unhashed class from globals.css. */
+.chip:global(.glassPanel) {
+  box-shadow: 0 1px 3px rgba(20, 23, 26, 0.06);
+}
+
+.chipOn {
+  background: var(--text-primary);
+  border: 1px solid var(--text-primary);
+  color: var(--surface);
+}
+
+.chipCount {
+  margin-left: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.chipOn .chipCount {
+  color: var(--surface);
+  opacity: 0.75;
+}
+
+@media (hover: hover) {
+  .chip:hover {
+    border-color: var(--border-strong);
+    color: var(--text-primary);
+  }
+}
+
+.chip:active {
+  transform: scale(0.97);
+  transition-duration: 120ms;
+}
+
+.clear {
+  padding: 3px var(--space-2);
+  color: var(--text-secondary);
+  font-size: 12px;
+  transition: color 150ms ease;
+}
+
+@media (hover: hover) {
+  .clear:hover {
+    color: var(--text-primary);
+  }
+}
+
+/* ---------- Column header + list ---------- */
+
+.meta {
+  display: grid;
+  grid-template-columns: var(--queue-cols);
+  gap: var(--space-4);
+  align-items: center;
+  padding: var(--space-2) var(--space-8) var(--space-2) calc(var(--space-8) + 2px);
+  /* border-strong: --border alone is proportionally too faint against the
+     new light canvas to read as a divider (verified ~1.15:1 vs the old
+     theme's ~1.36:1 for the same role). */
+  border-bottom: 1px solid var(--border-strong);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.metaRight {
+  text-align: right;
+}
+
+.list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+/* ---------- Row ---------- */
+
+.row {
+  display: grid;
+  grid-template-columns: var(--queue-cols);
+  gap: var(--space-4);
+  align-items: center;
+  width: 100%;
+  padding: var(--space-3) var(--space-8);
+  border-left: 2px solid transparent;
+  border-bottom: 1px solid var(--border-strong);
+  text-align: left;
+  transition: background-color 150ms ease;
+}
+
+@media (hover: hover) {
+  .row:hover {
+    background-color: var(--surface-hover);
+  }
+}
+
+/* Keyboard highlight — same 2px left rule the sidebar uses for "you are here". */
+.rowActive {
+  background-color: var(--surface-raised);
+  border-left-color: var(--text-primary);
+}
+
+/* 429s are infrastructure noise, not an agent decision. */
+.rowRateLimited {
+  border-left-style: dashed;
+  border-left-color: var(--border-strong);
+}
+
+.rowRateLimited .subject {
+  color: var(--text-secondary);
+}
+
+.rowActive.rowRateLimited {
+  border-left-style: solid;
+  border-left-color: var(--text-primary);
+}
+
+.subjectCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.dot {
+  flex: none;
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+}
+
+.dotResolved {
+  background: var(--resolve);
+}
+
+.dotEscalated {
+  background: var(--escalate);
+}
+
+.dotIncomplete {
+  box-shadow: inset 0 0 0 1.5px var(--text-tertiary);
+}
+
+.dotRateLimited {
+  box-shadow: inset 0 0 0 1.5px var(--border-strong);
+}
+
+.subject {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-primary);
+}
+
+.reviewedTag,
+.limitTag {
+  flex: none;
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  /* border-strong, not border — on a light canvas the two are close enough
+     that a 1px hairline in the fainter token nearly disappears. */
+  border: 1px solid var(--border-strong);
+}
+
+/* Data pills stay flat/opaque (no glass) — they sit inside a scannable row,
+   not floating chrome. --surface-hover reads as a distinct fill against the
+   white row background; plain --surface-raised is now the same white. */
+.pill {
+  justify-self: start;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+/* The four always-escalate categories carry the amber "needs a human" meaning. */
+.pillEscalate {
+  background: var(--escalate-tint);
+  border-color: transparent;
+  color: var(--escalate);
+}
+
+.pillMuted {
+  background: transparent;
+  border: 1px dashed var(--border-strong);
+  color: var(--text-secondary);
+}
+
+.reason {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.score {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.scoreResolve {
+  color: var(--resolve);
+}
+
+.scoreEscalate {
+  color: var(--escalate);
+}
+
+.scoreCritical {
+  color: var(--critical);
+}
+
+.scoreMuted {
+  color: var(--text-secondary);
+}
+
+.time {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* ---------- Empty state ---------- */
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-16) var(--space-8);
+  text-align: center;
+}
+
+.emptyMark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 99px;
+  background: var(--resolve-tint);
+}
+
+.emptyTitle {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.emptyBody {
+  max-width: 46ch;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.emptyAction {
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  transition: background-color 150ms ease;
+}
+
+@media (hover: hover) {
+  .emptyAction:hover {
+    background-color: var(--surface-hover);
+  }
+}
+
+.emptyAction:active {
+  transform: scale(0.97);
+  transition-duration: 120ms;
+}
+
+/* ---------- Keyboard hint ---------- */
+
+.hint {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-8);
+  border-top: 1px solid var(--border-strong);
+  background: var(--canvas);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.key {
+  padding: 1px 5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+/* ---------- Narrow ---------- */
+
+@media (max-width: 1100px) {
+  .screen {
+    --queue-cols: minmax(0, 1fr) 150px 60px 64px;
+  }
+
+  .reason {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .header {
+    padding: var(--space-6) var(--space-4) 0;
+  }
+
+  .meta {
+    display: none;
+  }
+
+  .row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-1) var(--space-3);
+    padding: var(--space-3) var(--space-4);
+  }
+
+  .pill {
+    grid-row: 2;
+    font-size: 11px;
+  }
+
+  .score {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .time {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .hint {
+    display: none;
+  }
+}

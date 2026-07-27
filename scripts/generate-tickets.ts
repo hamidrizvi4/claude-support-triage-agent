@@ -5,10 +5,11 @@
  *
  * Usage: npm run generate-tickets
  */
-import "dotenv/config";
+import { config } from "dotenv";
+config({ path: ".env.local" });
 import { getSupabaseAdmin } from "../src/lib/supabase";
 
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL ?? "nvidia/llama-3.1-nemotron-70b-instruct:free";
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "nvidia/nemotron-3-ultra-550b-a55b:free";
 
 const CATEGORY_PLAN: { category: string; count: number; brief: string }[] = [
   {
