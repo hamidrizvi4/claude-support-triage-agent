@@ -103,16 +103,28 @@ export async function getQueueTickets(): Promise<QueueTicket[]> {
   if (toolCalls.error) throw new Error(toolCalls.error.message);
 
   // Newest draft wins — ordered desc above, so first seen per ticket is latest.
+  // Also record the second-latest draft's timestamp per ticket as an attempt
+  // boundary: when a ticket is retried (e.g. rate-limited → retried clean),
+  // stale tool_calls from the superseded attempt are still in the table, and
+  // pairing one of those with the new draft would produce a bogus multi-hour
+  // latency. Only tool_calls after this boundary belong to the latest attempt.
   const latestDraft = new Map<string, DraftRow>();
+  const attemptCutoff = new Map<string, number>();
   for (const d of (drafts.data ?? []) as DraftRow[]) {
-    if (!latestDraft.has(d.ticket_id)) latestDraft.set(d.ticket_id, d);
+    if (!latestDraft.has(d.ticket_id)) {
+      latestDraft.set(d.ticket_id, d);
+    } else if (!attemptCutoff.has(d.ticket_id)) {
+      attemptCutoff.set(d.ticket_id, new Date(d.created_at).getTime());
+    }
   }
 
   const reviewed = new Set((reviews.data ?? []).map((r) => r.ticket_id as string));
 
   const firstCall = new Map<string, number>();
   for (const c of (toolCalls.data ?? []) as { ticket_id: string; created_at: string }[]) {
+    const cutoff = attemptCutoff.get(c.ticket_id) ?? -Infinity;
     const t = new Date(c.created_at).getTime();
+    if (t <= cutoff) continue;
     const seen = firstCall.get(c.ticket_id);
     if (seen == null || t < seen) firstCall.set(c.ticket_id, t);
   }
