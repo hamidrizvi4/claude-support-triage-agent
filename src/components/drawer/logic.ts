@@ -1,4 +1,7 @@
 import { CONFIDENCE_THRESHOLD, type Citation } from "@/lib/data/types";
+import { isHttpUrl } from "@/lib/data/classify";
+
+export { isHttpUrl };
 
 /**
  * Drafts link citations with a fragment (`...#specifying-client-tools`) while

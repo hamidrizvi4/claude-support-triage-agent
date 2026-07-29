@@ -7,8 +7,10 @@ import OpenAI from "openai";
 import { getSupabaseAdmin } from "../supabase";
 import { TOOLS, searchDocs, checkStatus, checkPricing, lookupAccount } from "./tools";
 
-// Fixed per CLAUDE.md — free, purpose-built for agent orchestration/tool calling.
-const MODEL = "nvidia/nemotron-3-ultra-550b-a55b:free";
+// Defaults to the free model per CLAUDE.md. Override with OPENROUTER_MODEL
+// (same pattern as scripts/generate-tickets.ts) for a paid run — e.g. a
+// portfolio-facing dataset on an Exacto-routed model for reliable tool calls.
+const MODEL = process.env.OPENROUTER_MODEL || "nvidia/nemotron-3-ultra-550b-a55b:free";
 const MAX_TURNS = 8;
 
 const SYSTEM_PROMPT = `You are a support triage agent for Anthropic's Claude API developer support
@@ -36,6 +38,15 @@ export type Ticket = {
   body: string;
   account_id: string | null;
 };
+
+/**
+ * Free model doesn't reliably return well-typed numbers for retrieval_score /
+ * self_certainty — coerce rather than let a bad value silently poison
+ * confidence as NaN.
+ */
+export function coerceScore(value: unknown): number {
+  return Number(value) || 0;
+}
 
 function getOpenRouterClient() {
   const apiKey = process.env.OPENROUTER_API_KEY;
@@ -96,10 +107,8 @@ export async function runAgent(ticket: Ticket): Promise<Resolution> {
     const submit = toolCalls.find((tc) => tc.function.name === "submit_resolution");
     if (submit) {
       const args = JSON.parse(submit.function.arguments) as Resolution;
-      // Free model doesn't reliably return well-typed numbers for these two —
-      // coerce rather than let a bad value silently poison confidence as NaN.
-      args.retrieval_score = Number(args.retrieval_score) || 0;
-      args.self_certainty = Number(args.self_certainty) || 0;
+      args.retrieval_score = coerceScore(args.retrieval_score);
+      args.self_certainty = coerceScore(args.self_certainty);
       await logToolCall(ticket.id, "submit_resolution", args, null);
       return args;
     }

@@ -1,5 +1,5 @@
 import type { Citation } from "@/lib/data/types";
-import { matchCitation } from "./logic";
+import { matchCitation, isHttpUrl } from "./logic";
 import styles from "./drawer.module.css";
 
 /**
@@ -48,6 +48,9 @@ function renderInline(
       if (citation) {
         cited.add(citation.source_url);
         return <CitationChip key={key} label={label} citation={citation} />;
+      }
+      if (!isHttpUrl(url)) {
+        return <span key={key}>{label}</span>;
       }
       return (
         <a

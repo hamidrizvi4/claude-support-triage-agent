@@ -30,6 +30,19 @@ An AI agent that triages incoming Claude API developer support tickets. See
   `draft_responses`, updates `tickets.status` / `tickets.confidence`, prints an
   auto-resolve/escalation summary.
 
+## Day 3 — review queue + reporting dashboard
+
+- `src/app/page.tsx` + `src/components/queue/*` — the review queue: filterable,
+  keyboard-navigable (`j`/`k`/`Enter`) list of triaged tickets.
+- `src/components/drawer/*` — the ticket detail drawer (reasoning trace, confidence
+  breakdown, cited draft response, approve/edit/reject actions writing to `reviews`).
+- `src/app/dashboard/page.tsx` + `src/components/dashboard/*` — KPIs, escalation
+  breakdowns, and the doc-gap list (lowest-`retrieval_score` tickets, i.e. where the
+  docs corpus is thin).
+- `src/lib/data/{types,queries}.ts` — the shared layer that turns raw rows into
+  `resolved | escalated | incomplete | rate_limited` outcomes, so the queue and the
+  dashboard can never disagree about a number.
+
 ### Setup
 
 ```bash
@@ -44,6 +57,7 @@ then:
 npm run ingest-docs
 npm run generate-tickets
 npm run run-triage
+npm run dev
 ```
 
-Review UI and reporting dashboard are Day 3 — not built yet.
+`npm run dev` serves the review queue at `/` and the dashboard at `/dashboard`.

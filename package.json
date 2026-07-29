@@ -10,7 +10,11 @@
     "ingest-docs": "tsx scripts/ingest-docs.ts",
     "generate-tickets": "tsx scripts/generate-tickets.ts",
     "run-triage": "tsx scripts/run-triage.ts",
-    "test:routing": "tsx src/lib/agent/routing.selftest.ts"
+    "test:routing": "tsx src/lib/agent/routing.selftest.ts",
+    "test:orchestrator": "tsx src/lib/agent/orchestrator.selftest.ts",
+    "test:classify": "tsx src/lib/data/classify.selftest.ts",
+    "test:drawer-logic": "tsx src/components/drawer/logic.selftest.ts",
+    "test": "npm run test:routing && npm run test:orchestrator && npm run test:classify && npm run test:drawer-logic"
   },
   "browserslist": [
     "last 2 Chrome versions",

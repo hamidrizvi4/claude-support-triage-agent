@@ -25,6 +25,7 @@ export default async function DashboardPage() {
   const docGapAlert = stats.docGapRate > DOC_GAP_ALERT_RATE;
   const threshold = DOC_GAP_THRESHOLD.toFixed(2);
   const toolCallTotal = stats.toolUsage.reduce((sum, t) => sum + t.count, 0);
+  const { reviewedAutoResolved, overturned, overturnRate } = stats.reviewCalibration;
   // Both breakdowns are built from the same escalated + incomplete rows, so
   // their total is the exact escalated count — no rounding off a rate.
   const escalatedCount = stats.escalationByReason.reduce((sum, r) => sum + r.count, 0);
@@ -146,7 +147,31 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      <section className={`${styles.section} ${styles.rise}`} style={rise(3)}>
+      {/* Validates the 0.6*retrieval + 0.4*certainty formula against what a
+          reviewer actually did with auto-resolved tickets, instead of leaving
+          it a plausible-but-unverified formula. */}
+      <section
+        className={`${styles.integrity} ${styles.rise}`}
+        style={rise(3)}
+        aria-label="Confidence calibration"
+      >
+        <div className={styles.integrityTop}>
+          <span className={styles.integrityLabel}>Confidence calibration</span>
+          <span className={styles.integrityRate}>
+            {overturnRate == null ? "—" : pct(overturnRate)}{" "}
+            <span>overturned of {reviewedAutoResolved} reviewed auto-resolves</span>
+          </span>
+        </div>
+        <p className={styles.note}>
+          {reviewedAutoResolved === 0
+            ? "No auto-resolved ticket has been reviewed yet — this rate fills in as review activity accumulates."
+            : `A reviewer rejected or edited ${overturned} of ${reviewedAutoResolved} auto-resolved ${
+                reviewedAutoResolved === 1 ? "ticket" : "tickets"
+              } — the confidence formula's real-world miss rate, not just its stated threshold.`}
+        </p>
+      </section>
+
+      <section className={`${styles.section} ${styles.rise}`} style={rise(4)}>
         <div className={styles.sectionHead}>
           <h2 className={styles.sectionTitle}>Escalation breakdown</h2>
           <span className={styles.sectionMeta}>{escalatedCount} escalated</span>
@@ -158,7 +183,7 @@ export default async function DashboardPage() {
       </section>
 
       {/* The product insight: triage surfaces which docs failed to answer. */}
-      <section className={`${styles.section} ${styles.rise}`} style={rise(4)}>
+      <section className={`${styles.section} ${styles.rise}`} style={rise(5)}>
         <div className={`glassPanel ${styles.docGaps}`}>
           <div className={styles.docGapsHead}>
             <span className={styles.docGapsTitleWrap}>
@@ -198,7 +223,7 @@ export default async function DashboardPage() {
         </div>
       </section>
 
-      <section className={`${styles.section} ${styles.rise}`} style={rise(5)}>
+      <section className={`${styles.section} ${styles.rise}`} style={rise(6)}>
         <div className={styles.sectionHead}>
           <h2 className={styles.sectionTitle}>Tool calls</h2>
           <span className={styles.sectionMeta}>{toolCallTotal} total</span>

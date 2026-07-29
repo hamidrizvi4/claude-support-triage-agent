@@ -3,6 +3,7 @@
  * layer is the single place that decides what a row *means* so the queue and
  * the dashboard can never disagree about it.
  */
+import { CONFIDENCE_THRESHOLD, ESCALATE_CATEGORIES } from "../agent/routing";
 
 export type Citation = { source_url: string; title: string };
 
@@ -17,14 +18,9 @@ export type AgentCategory =
   | "bug_report";
 
 /** The four categories that always escalate regardless of confidence. */
-export const ALWAYS_ESCALATE: ReadonlySet<string> = new Set([
-  "billing",
-  "security_abuse",
-  "sales_enterprise",
-  "bug_report",
-]);
+export const ALWAYS_ESCALATE: ReadonlySet<string> = ESCALATE_CATEGORIES;
 
-export const CONFIDENCE_THRESHOLD = 0.8;
+export { CONFIDENCE_THRESHOLD };
 /** Below this retrieval_score the docs didn't really answer the question. */
 export const DOC_GAP_THRESHOLD = 0.5;
 /** Doc-gap rate above this reads as "content team needs to act". */
@@ -63,6 +59,8 @@ export type QueueTicket = {
 
   outcome: RunOutcome;
   reviewed: boolean;
+  /** Latest review's action, if any. Used to calibrate the confidence formula. */
+  reviewAction: ReviewAction | null;
   /** Seconds from first tool call to submitted draft. Null if not measurable. */
   latencySeconds: number | null;
 };
@@ -115,6 +113,18 @@ export type DashboardStats = {
   escalationByReason: Breakdown[];
   docGaps: DocGap[];
   toolUsage: Breakdown[];
+  /**
+   * Validates the 0.6*retrieval + 0.4*certainty formula against what a human
+   * reviewer actually did with auto-resolved tickets — the confidence formula
+   * has no calibration behind it otherwise. Null rate until there's at least
+   * one reviewed auto-resolve; small N is expected early on, shown honestly
+   * rather than hidden.
+   */
+  reviewCalibration: {
+    reviewedAutoResolved: number;
+    overturned: number;
+    overturnRate: number | null;
+  };
 };
 
 const CATEGORY_LABELS: Record<string, string> = {

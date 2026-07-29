@@ -187,6 +187,7 @@ route(ticket):
       explicit request. Superseding the original dark-only/no-glassmorphism
       call below; see "Day 3 — retheme" for the new tokens and two real bugs
       the retheme surfaced.
+- [x] Day 4 — pre-public security & polish pass. See "Day 4 — security & polish" below.
 
 ### Day 3 — shared data layer
 `src/lib/data/{types,queries}.ts` is the single place a raw row becomes a
@@ -249,6 +250,98 @@ device or browser-support issue.
 Rate-limited runs sort to the *bottom*, not by recency. They were the most
 recent run, so newest-first buried every real agent decision under 10
 non-actionable rows. They're excluded from the header badge for the same reason.
+
+### Day 4 — security & polish
+Pre-public pass, prompted by `mcp__supabase__get_advisors` and a manual review.
+
+**Security (fixed live, `0005_rls_and_search_path.sql`):** RLS was disabled
+on all 6 tables (ERROR-level) and `0004` had additionally granted
+anon/authenticated full `ALL` privilege as a fix for a different problem
+(missing service_role grants). The app is 100% server-side (service_role,
+`rolbypassrls=true`), so nothing broke — but the anon grant meant the first
+client-side `supabase-js` call added with the publishable key would get
+unauthenticated read/write on every table. Fixed with two independent
+layers: revoked anon/authenticated's grants (incl. default-privilege
+versions, so future tables aren't exposed either) and enabled RLS with zero
+policies (default-deny for everyone except service_role). Also pinned
+`match_doc_chunks`'s `search_path` (function search-path hijacking, WARN).
+Verified via `get_advisors` before/after — both the ERROR and the WARN are
+gone; a live `service_role` query still works.
+
+**Citation URLs:** `parseCitations` accepted any string as `source_url`,
+which becomes a real `<a href>` in the drawer — a `javascript:`/`data:` URI
+in a model-generated citation would render as a clickable link. Same class
+of bug existed independently in `DraftBody`'s raw-markdown-link fallback
+(non-cited `[label](url)` links render straight from `draft_text`, bypassing
+citations entirely). Both now allowlist `http:`/`https:` before becoming an
+href. Low real-world severity today (synthetic data, no real users) but a
+real, fixable gap, not a hypothetical one.
+
+**Extracted `src/lib/data/classify.ts`:** `classifyOutcome` and
+`parseCitations` used to live in `queries.ts`, which is gated by
+`import "server-only"` — that throws unconditionally under plain
+`tsx`/node (not just when bundled for a client component), so the functions
+that had already caused two real dashboard-corrupting bugs were untestable
+without pulling in a live Supabase client. Split the pure logic into its own
+side-effect-free module; `queries.ts` re-exports both names, so no caller
+changed. New `classify.selftest.ts` covers both functions; new
+`orchestrator.selftest.ts` covers `coerceScore` (the NaN-guard from the
+provider swap, extracted into a named export so it's directly testable).
+Also wired the pre-existing but never-registered `drawer/logic.selftest.ts`
+into `npm test`.
+
+**Deduped two business constants:** `CONFIDENCE_THRESHOLD` was a literal
+`0.8` in both `agent/routing.ts` and `data/types.ts`; `ALWAYS_ESCALATE`
+(types.ts) mirrored `ESCALATE_CATEGORIES` (routing.ts) the same way. Same
+failure mode both times — one gets edited, the other silently doesn't.
+`routing.ts` (the actual agent decision logic) is now the single source for
+both; `types.ts` imports and re-exports.
+
+**Reviewer-overturn rate:** the confidence formula
+(`0.6*retrieval + 0.4*certainty`, threshold 0.8) had no calibration behind
+it even though `reviews` already captures the signal to check it — whether a
+reviewer approved, edited, or rejected each auto-resolved ticket.
+`getDashboardStats` now returns `reviewCalibration` (reviewed-auto-resolved
+count, overturned count, rate — `null` rate until there's at least one
+reviewed auto-resolve) and the dashboard shows it as a strip below the KPI
+row, reusing the existing run-integrity styling. Honest at low N: with only
+one real review in the dataset today it reads "0.0% overturned of 1 reviewed
+auto-resolves," not a misleadingly precise-looking percentage.
+
+**npm audit — triaged, not force-fixed:** 12 high-severity findings, in two
+clusters, both currently non-exploitable in this app's actual usage: (1) the
+`eslint`/`minimatch`/`brace-expansion`/`eslint-plugin-*` chain — 8 of 12,
+all devDependencies, never shipped, and the ReDoS is only reachable via
+attacker-controlled glob input, which doesn't happen here; (2) `next` →
+`postcss`/`sharp` — `postcss` processes this repo's own authored CSS at
+build time, never untrusted input; `sharp` is `next/image`'s optional image
+dependency and `next/image` is never imported anywhere in `src/`, so its
+vulnerable decode path is unreachable at runtime. The only `npm audit fix`
+path for either cluster is a multi-major downgrade (Next 16→9.3.3 — pre-App
+Router; eslint 9→10) that would break the codebase, so this is a documented,
+accepted risk pending an upstream patch release, not a code change.
+
+**README no longer undersells the finished UI** — it said Day 3 (queue,
+drawer, dashboard) was "not built yet" after it had shipped.
+
+**Added `LICENSE`** (MIT) — there wasn't one.
+
+**Paid-model rerun — the 50% incomplete rate is gone.** `orchestrator.ts`'s
+`MODEL` now reads `process.env.OPENROUTER_MODEL` (falls back to the free
+nemotron default — same pattern as `generate-tickets.ts`), so a paid run is
+an explicit opt-in, not a permanent swap. Reran all 40 tickets on
+`deepseek/deepseek-v3.2:exacto` (Exacto-routed, tool-calling-accuracy
+provider selection — see the free-model comment in `orchestrator.ts` for why
+`:free` slugs don't get this). Result: 15 auto-resolved / 25 escalated, and
+only **3 of 40 (7.5%) incomplete** — 2 genuine no-tool-call misses plus 1 new
+failure mode, a `JSON.parse` error on `submit_resolution`'s arguments
+(`Expected ',' or ']' after array element... position 2852`), almost
+certainly `max_tokens: 2048` truncating a long draft_response+citations
+payload mid-JSON. Worth raising `max_tokens` in a follow-up, not fixed here.
+Actual cost: **$0.25** for the full run (OpenRouter key usage, confirmed via
+`/api/v1/key`) — nowhere near the $10 budget. The free-tier 40-50% miss rate
+stays in the case study as "here's what $0 costs you"; this paid run is the
+clean portfolio-facing dataset.
 
 ## Progress: provider swap — done, blocked only on quota
 All three real bugs found during testing are fixed and confirmed:

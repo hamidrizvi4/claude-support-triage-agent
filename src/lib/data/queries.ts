@@ -5,6 +5,7 @@
  */
 import "server-only";
 import { getSupabaseAdmin } from "../supabase";
+import { classifyOutcome, parseCitations } from "./classify";
 import {
   ALWAYS_ESCALATE,
   CONFIDENCE_THRESHOLD,
@@ -12,39 +13,20 @@ import {
   categoryLabel,
   reasonLabel,
   type AgentCategory,
-  type Citation,
   type DashboardStats,
   type DocGap,
   type QueueTicket,
+  type ReviewAction,
   type Review,
-  type RunOutcome,
   type ToolCall,
 } from "./types";
+
+export { classifyOutcome, parseCitations } from "./classify";
 
 function num(value: unknown): number | null {
   if (value == null) return null;
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? n : null;
-}
-
-/**
- * The one place a raw row becomes a meaning. Classification reads only
- * draft_responses.escalation_reason — never tickets.status, which the review
- * write-path overwrites to 'reviewed' the moment anyone approves/rejects a
- * ticket. Reading status here would silently reclassify resolved<->escalated
- * on review, corrupting every dashboard stat retroactively.
- * Order matters: a 429 also starts with "agent_error:", so it's tested first.
- * Assumes every ticket has exactly one draft_responses row by the time this
- * runs — true for anything that has passed through run-triage.ts, which
- * always persists a row (real or fallback) even when the agent call throws.
- * A ticket never yet run has no row at all and would misclassify as
- * "resolved"; that state doesn't occur in this pipeline today.
- */
-export function classifyOutcome(escalationReason: string | null): RunOutcome {
-  const reason = escalationReason ?? "";
-  if (reason.includes("429") || reason.includes("Rate limit")) return "rate_limited";
-  if (reason.startsWith("agent_error:")) return "incomplete";
-  return reason === "" ? "resolved" : "escalated";
 }
 
 type TicketRow = {
@@ -70,16 +52,6 @@ type DraftRow = {
   created_at: string;
 };
 
-function parseCitations(raw: unknown): Citation[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.flatMap((c) => {
-    if (!c || typeof c !== "object") return [];
-    const { source_url, title } = c as Record<string, unknown>;
-    if (typeof source_url !== "string") return [];
-    return [{ source_url, title: typeof title === "string" ? title : source_url }];
-  });
-}
-
 export async function getQueueTickets(): Promise<QueueTicket[]> {
   const supabase = getSupabaseAdmin();
 
@@ -93,7 +65,10 @@ export async function getQueueTickets(): Promise<QueueTicket[]> {
         "id, ticket_id, draft_text, citations, confidence, category, escalation_reason, retrieval_score, self_certainty, created_at"
       )
       .order("created_at", { ascending: false }),
-    supabase.from("reviews").select("ticket_id"),
+    supabase
+      .from("reviews")
+      .select("ticket_id, action, created_at")
+      .order("created_at", { ascending: false }),
     supabase.from("tool_calls").select("ticket_id, created_at"),
   ]);
 
@@ -118,7 +93,12 @@ export async function getQueueTickets(): Promise<QueueTicket[]> {
     }
   }
 
-  const reviewed = new Set((reviews.data ?? []).map((r) => r.ticket_id as string));
+  // Ordered desc above, so first seen per ticket is its latest review action.
+  const latestReviewAction = new Map<string, ReviewAction>();
+  for (const r of (reviews.data ?? []) as { ticket_id: string; action: ReviewAction }[]) {
+    if (!latestReviewAction.has(r.ticket_id)) latestReviewAction.set(r.ticket_id, r.action);
+  }
+  const reviewed = new Set(latestReviewAction.keys());
 
   const firstCall = new Map<string, number>();
   for (const c of (toolCalls.data ?? []) as { ticket_id: string; created_at: string }[]) {
@@ -161,6 +141,7 @@ export async function getQueueTickets(): Promise<QueueTicket[]> {
 
       outcome: classifyOutcome(d?.escalation_reason ?? null),
       reviewed: reviewed.has(t.id),
+      reviewAction: latestReviewAction.get(t.id) ?? null,
       latencySeconds,
     };
   });
@@ -292,6 +273,14 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const { data: toolRows } = await supabase.from("tool_calls").select("tool_name");
   const toolUsage = tally((toolRows ?? []).map((r) => r.tool_name as string));
 
+  // Calibrates the confidence formula against what a reviewer actually did:
+  // an auto-resolved ticket a reviewer rejected or had to edit is a formula
+  // miss, not just a review-queue event.
+  const reviewedAutoResolved = tickets.filter(
+    (t) => t.outcome === "resolved" && t.reviewAction != null
+  );
+  const overturned = reviewedAutoResolved.filter((t) => t.reviewAction !== "approve");
+
   return {
     runHealth: {
       completed: completed.length,
@@ -315,6 +304,14 @@ export async function getDashboardStats(): Promise<DashboardStats> {
     ),
     docGaps,
     toolUsage,
+    reviewCalibration: {
+      reviewedAutoResolved: reviewedAutoResolved.length,
+      overturned: overturned.length,
+      overturnRate:
+        reviewedAutoResolved.length === 0
+          ? null
+          : overturned.length / reviewedAutoResolved.length,
+    },
   };
 }
 
