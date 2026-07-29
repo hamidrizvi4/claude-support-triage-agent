@@ -444,6 +444,15 @@
     display: none;
   }
 
+  .filters {
+    padding: var(--space-4) 0 var(--space-3);
+  }
+
+  .filterLabel {
+    width: auto;
+    flex: none;
+  }
+
   .row {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: var(--space-1) var(--space-3);

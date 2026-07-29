@@ -24,6 +24,7 @@ An AI agent that triages incoming Claude API developer support tickets. See
 - `src/lib/agent/orchestrator.ts` — the Claude tool-use loop for one ticket. Logs
   every tool call (including `submit_resolution`) to `tool_calls`; loops until
   `submit_resolution` or an 8-turn budget runs out.
+
 - `src/lib/agent/routing.ts` — pure confidence + routing function from CLAUDE.md's
   formula. `npm run test:routing` is a tiny assert-based self-check.
 - `scripts/run-triage.ts` — runs every row in `tickets` through the loop, writes
