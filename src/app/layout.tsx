@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import styles from "./shell.module.css";
 import { Sidebar } from "@/components/Sidebar";
+import { resolveModel } from "@/lib/model";
 
 export const metadata: Metadata = {
   title: "Triage Control — Claude API Support",
@@ -33,7 +34,7 @@ export default function RootLayout({
       </head>
       <body>
         <div className={styles.shell}>
-          <Sidebar />
+          <Sidebar model={resolveModel()} />
           <main className={styles.main}>{children}</main>
         </div>
       </body>

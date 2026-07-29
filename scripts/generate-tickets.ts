@@ -8,8 +8,9 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 import { getSupabaseAdmin } from "../src/lib/supabase";
+import { resolveModel } from "../src/lib/model";
 
-const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || "nvidia/nemotron-3-ultra-550b-a55b:free";
+const OPENROUTER_MODEL = resolveModel();
 
 const CATEGORY_PLAN: { category: string; count: number; brief: string }[] = [
   {

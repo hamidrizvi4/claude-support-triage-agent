@@ -1,6 +1,16 @@
 .shell {
   display: grid;
   grid-template-columns: 216px minmax(0, 1fr);
+  /* Without an explicit row track, CSS Grid auto-sizes the single implicit
+     row to its content's height instead of stretching it to fill the
+     container — so the sidebar and main column would only be as tall as
+     their content, leaving the rest of the 100vh/100dvh as bare canvas
+     below them. minmax(0, 1fr) forces the row (and both grid-item children,
+     via default stretch) to consume the full height, which is what lets
+     .main's overflow-y: auto actually scroll internally. The mobile rule
+     below already set this correctly for its two-row layout; this was
+     missing from the default single-row desktop rule. */
+  grid-template-rows: minmax(0, 1fr);
   height: 100vh;
   height: 100dvh;
 }

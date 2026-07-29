@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { modelDisplayName } from "@/lib/model";
 import styles from "./Sidebar.module.css";
 
 const NAV = [
@@ -35,7 +36,7 @@ const NAV = [
   },
 ];
 
-export function Sidebar() {
+export function Sidebar({ model }: { model: string }) {
   const pathname = usePathname();
 
   return (
@@ -82,7 +83,7 @@ export function Sidebar() {
           <span className={styles.dot} aria-hidden="true" />
           agent v0.3
         </span>
-        <span className={styles.footerRow}>nemotron-3-ultra</span>
+        <span className={styles.footerRow}>{modelDisplayName(model)}</span>
       </div>
     </nav>
   );

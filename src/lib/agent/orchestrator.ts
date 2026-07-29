@@ -5,12 +5,13 @@
  */
 import OpenAI from "openai";
 import { getSupabaseAdmin } from "../supabase";
+import { resolveModel } from "../model";
 import { TOOLS, searchDocs, checkStatus, checkPricing, lookupAccount } from "./tools";
 
 // Defaults to the free model per CLAUDE.md. Override with OPENROUTER_MODEL
 // (same pattern as scripts/generate-tickets.ts) for a paid run — e.g. a
 // portfolio-facing dataset on an Exacto-routed model for reliable tool calls.
-const MODEL = process.env.OPENROUTER_MODEL || "nvidia/nemotron-3-ultra-550b-a55b:free";
+const MODEL = resolveModel();
 const MAX_TURNS = 8;
 
 const SYSTEM_PROMPT = `You are a support triage agent for Anthropic's Claude API developer support
