@@ -177,8 +177,9 @@ route(ticket):
 ## Progress
 - [x] Day 1 — repo scaffold, Supabase schema, docs ingestion pipeline, synthetic tickets
 - [x] Day 2 — tools, orchestrator, routing engine, run-triage.ts, provider-swapped
-      to OpenRouter end-to-end, 3 real bugs found and fixed, 3 runs completed
-      (blocked on daily free-tier quota for a clean 4th run — see below)
+      to OpenRouter end-to-end, 3 real bugs found and fixed, 3 runs completed on
+      the free tier (a clean 4th run was blocked on daily free-tier quota at the
+      time — resolved in Day 4 with a paid rerun, see below)
 - [x] Day 3 — all three screens built against real persisted data. Queue,
       ticket drawer, dashboard. Production build + `tsc --noEmit` + eslint clean,
       Impeccable detector `[]`, review write-path verified end-to-end (Approve →
@@ -343,7 +344,7 @@ Actual cost: **$0.25** for the full run (OpenRouter key usage, confirmed via
 stays in the case study as "here's what $0 costs you"; this paid run is the
 clean portfolio-facing dataset.
 
-## Progress: provider swap — done, blocked only on quota
+## Progress: provider swap — done, resolved (was blocked on quota through Day 3)
 All three real bugs found during testing are fixed and confirmed:
 1. Guarded `response.choices[0]` — malformed/502 upstream responses now surface
    as a clean error, not a crash
@@ -353,19 +354,23 @@ All three real bugs found during testing are fixed and confirmed:
    `Resolution` — no more silent `NaN` confidence from non-numeric model output
 
 Known, accepted constraint: `nvidia/nemotron-3-ultra-550b-a55b:free` misses the
-forced `submit_resolution` tool call on roughly 40–45% of tickets. OpenRouter's
+forced `submit_resolution` tool call on roughly 40–50% of tickets. OpenRouter's
 "Exacto" tool-calling-accuracy routing isn't offered on `:free` model slugs, so
 there's no config fix while staying at $0 — this is a real, disclosed tradeoff
-of the free-model choice, not a bug to keep chasing. State it plainly in the
-case study rather than hide it.
+of the free-model choice, not a bug to keep chasing. Stated plainly in the
+README's Results table rather than hidden. This stayed **unresolved through
+Day 3**: blocked on OpenRouter's daily free-tier quota, so Day 3's UI was
+built against the real data already persisted from the three completed runs
+(a mix of genuine auto-resolves/escalations and some quota-429 rows, kept
+visually distinct in the UI and excluded from dashboard stats).
 
-Currently blocked on OpenRouter's daily free-tier quota (resets ~24h from last
-run). **Don't block Day 3 on the quota reset** — build the UI now against the
-real data already persisted from the three completed runs (mix of genuine
-auto-resolves/escalations and some quota-429 rows, which should be visually
-distinguishable in the UI, not counted as real agent decisions in the dashboard
-stats). Re-run once the quota resets for a clean dataset; the UI shouldn't need
-to change when that happens.
+**Resolved in Day 4** (see "Day 4 — security & polish" above): `orchestrator.ts`
+now reads `MODEL` from `process.env.OPENROUTER_MODEL`, defaulting to the free
+model. Reran the full 40-ticket dataset on `deepseek/deepseek-v3.2:exacto`
+(paid, Exacto-routed) — 15 resolved / 22 escalated / 3 incomplete, $0.25 total.
+The free-tier run's numbers stay in the README as the disclosed $0 tradeoff;
+the paid run is what the live queue/dashboard show now. No further quota
+blocker — a rerun on either model is one `npm run run-triage` away.
 
 ## Day 3 scope: Review Queue + Reporting Dashboard
 
