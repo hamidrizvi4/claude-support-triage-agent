@@ -5,6 +5,17 @@
   /* Shared column track — the column header and every row must agree exactly. */
   --queue-cols: minmax(0, 1fr) 168px 216px 58px 66px;
 
+  /* Capped + centered like the dashboard's .page, so a single flex column
+     (the subject cell absorbs all extra width via minmax(0, 1fr)) doesn't
+     stretch into a half-empty row on wide/ultrawide monitors. Wider than
+     the dashboard's 1180px — this is a working data list with five columns,
+     not report prose — but still bounded instead of full-bleed. No-op at
+     the 1440px baseline this screen was designed at; only engages once the
+     content column exceeds 1600px. */
+  width: 100%;
+  max-width: 1600px;
+  margin: 0 auto;
+
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -131,6 +142,15 @@
     border-color: var(--border-strong);
     color: var(--text-primary);
   }
+
+  /* .chip:hover and .chipOn have equal specificity (one class each) — without
+     this, hovering a *selected* chip lets :hover's dark text win over
+     .chipOn's dark fill, rendering the label invisible (black on black)
+     while the count survives on its own rule. Same specificity, defined
+     after, wins the tie back for the selected state. */
+  .chipOn:hover {
+    color: var(--surface);
+  }
 }
 
 .chip:active {
@@ -178,6 +198,16 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Containing block for absolutely-positioned descendants (e.g. globals.css's
+     .srOnly inside each row's confidence score). Without this, an
+     out-of-flow absolute box with no positioned ancestor resolves its static
+     position against the viewport instead of this scroll container — for a
+     40-row list that lands ~2000px down an unclipped page, which inflates
+     document.documentElement's scrollable area and drags the whole shell
+     (sidebar included) into a phantom page-level scroll. overflow-y: auto
+     alone does not prevent this — only clips normal-flow content, not
+     out-of-flow descendants whose containing block is elsewhere. */
+  position: relative;
 }
 
 /* ---------- Row ---------- */
@@ -198,6 +228,13 @@
 @media (hover: hover) {
   .row:hover {
     background-color: var(--surface-hover);
+  }
+
+  /* Same equal-specificity issue as .chipOn:hover above: without this,
+     hovering the keyboard-active row lets :hover's tint silently replace
+     the "you are here" highlight instead of layering on top of it. */
+  .rowActive:hover {
+    background-color: var(--surface-raised);
   }
 }
 

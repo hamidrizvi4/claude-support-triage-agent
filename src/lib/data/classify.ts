@@ -38,12 +38,26 @@ export function isHttpUrl(url: string): boolean {
   }
 }
 
+/**
+ * Fallback label when the model omits a title (or, seen in the wild, echoes
+ * the URL back as the title) — the last path segment, humanized, reads far
+ * better in a citation chip than a raw, mid-word-truncated URL.
+ */
+function titleFromUrl(url: string): string {
+  const path = url.split(/[?#]/)[0].replace(/\/+$/, "");
+  const segment = path.split("/").pop();
+  if (!segment) return url;
+  return segment.replace(/[-_]+/g, " ").replace(/\b\w/g, (ch) => ch.toUpperCase());
+}
+
 export function parseCitations(raw: unknown): Citation[] {
   if (!Array.isArray(raw)) return [];
   return raw.flatMap((c) => {
     if (!c || typeof c !== "object") return [];
     const { source_url, title } = c as Record<string, unknown>;
     if (typeof source_url !== "string" || !isHttpUrl(source_url)) return [];
-    return [{ source_url, title: typeof title === "string" ? title : source_url }];
+    const hasRealTitle =
+      typeof title === "string" && title.trim().length > 0 && !isHttpUrl(title);
+    return [{ source_url, title: hasRealTitle ? title : titleFromUrl(source_url) }];
   });
 }

@@ -70,7 +70,14 @@ html,
 body {
   height: 100%;
   max-width: 100vw;
-  overflow-x: hidden;
+  /* Fixed app shell: .shell owns the viewport box, .main/.list own scrolling.
+     The document itself must never scroll — overflow-x: hidden alone leaves
+     overflow-y at its default (visible), and per spec a mismatched pair
+     computes the visible axis to auto, which is what let the page scroll at
+     all if anything (e.g. an out-of-flow descendant) ever extended past the
+     viewport. Locking both axes makes that a hard invariant instead of an
+     accident of which axis happened to be set. */
+  overflow: hidden;
 }
 
 body {

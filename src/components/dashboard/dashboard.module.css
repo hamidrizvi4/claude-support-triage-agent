@@ -2,6 +2,8 @@
    Elevation is declared once, with a border. No shadows anywhere. */
 
 .page {
+  width: 100%;
+  margin: 0 auto;
   padding: var(--space-8);
   max-width: 1180px;
   display: flex;

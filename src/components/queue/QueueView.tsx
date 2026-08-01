@@ -76,6 +76,12 @@ export function QueueView({ tickets, toolCallsByTicket }: Props) {
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
+      // The drawer is a modal (aria-modal="true") and owns keyboard input
+      // while open — without this, j/k silently moved the cursor and
+      // scrolled the queue list behind it, visible through the scrim,
+      // while the drawer kept showing whatever ticket was open before.
+      if (selectedId !== null) return;
+
       const el = event.target as HTMLElement | null;
       if (
         el &&
@@ -104,7 +110,7 @@ export function QueueView({ tickets, toolCallsByTicket }: Props) {
 
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [visible, activeIndex]);
+  }, [visible, activeIndex, selectedId]);
 
   // Instant, never smooth — this fires on every j/k of a long triage batch.
   useEffect(() => {

@@ -26,14 +26,51 @@ assert.deepStrictEqual(parseCitations(null), []);
 assert.deepStrictEqual(parseCitations("not an array"), []);
 assert.deepStrictEqual(parseCitations([1, "x", null]), []);
 
-// valid entry passes through; missing title falls back to source_url.
+// valid entry passes through unchanged.
 assert.deepStrictEqual(
   parseCitations([{ source_url: "https://docs.claude.com/pricing", title: "Pricing" }]),
   [{ source_url: "https://docs.claude.com/pricing", title: "Pricing" }]
 );
+
+// missing title falls back to a humanized path segment, not the raw URL —
+// seen live in production: a citation with no title rendered as an
+// unreadable, mid-word-truncated URL in the drawer's "Sources" chip.
 assert.deepStrictEqual(
   parseCitations([{ source_url: "https://docs.claude.com/pricing" }]),
-  [{ source_url: "https://docs.claude.com/pricing", title: "https://docs.claude.com/pricing" }]
+  [{ source_url: "https://docs.claude.com/pricing", title: "Pricing" }]
+);
+assert.deepStrictEqual(
+  parseCitations([{ source_url: "https://platform.claude.com/docs/en/api/messages/count_tokens" }]),
+  [
+    {
+      source_url: "https://platform.claude.com/docs/en/api/messages/count_tokens",
+      title: "Count Tokens",
+    },
+  ]
+);
+
+// a model that echoes the URL back as its own title gets the same fallback,
+// not the raw URL rendered as a "title" — this is the exact shape found in
+// a real stored draft_responses row.
+assert.deepStrictEqual(
+  parseCitations([
+    {
+      source_url: "https://platform.claude.com/docs/en/api/messages/count_tokens",
+      title: "https://platform.claude.com/docs/en/api/messages/count_tokens",
+    },
+  ]),
+  [
+    {
+      source_url: "https://platform.claude.com/docs/en/api/messages/count_tokens",
+      title: "Count Tokens",
+    },
+  ]
+);
+
+// blank/whitespace-only title is treated as missing too.
+assert.deepStrictEqual(
+  parseCitations([{ source_url: "https://docs.claude.com/pricing", title: "   " }]),
+  [{ source_url: "https://docs.claude.com/pricing", title: "Pricing" }]
 );
 
 // plain http is still allowed...
