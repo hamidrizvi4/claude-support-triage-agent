@@ -7,7 +7,7 @@ import styles from "./Sidebar.module.css";
 
 const NAV = [
   {
-    href: "/",
+    href: "/queue",
     label: "Queue",
     icon: (
       <svg width="15" height="15" viewBox="0 0 15 15" fill="none" aria-hidden="true">
@@ -41,7 +41,8 @@ export function Sidebar({ model }: { model: string }) {
 
   return (
     <nav className={`glassPanel ${styles.sidebar}`} aria-label="Primary">
-      <div className={styles.brand}>
+      {/* The brand links back to the intro page at `/`. */}
+      <Link href="/" className={styles.brand} aria-label="Triage Control — about this agent">
         <div className={styles.mark} aria-hidden="true">
           <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
             <path
@@ -57,13 +58,12 @@ export function Sidebar({ model }: { model: string }) {
           <span className={styles.brandName}>Triage Control</span>
           <span className={styles.brandSub}>Claude API support</span>
         </span>
-      </div>
+      </Link>
 
       <div className={styles.nav}>
         <span className={styles.navLabel}>Workspace</span>
         {NAV.map((item) => {
-          const active =
-            item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
+          const active = pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}

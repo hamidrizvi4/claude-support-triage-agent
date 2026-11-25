@@ -26,14 +26,18 @@ start from zero?
 
 ## Screenshots
 
+![Review queue walkthrough — filter, j/k navigation, ticket drawer with reasoning trace and confidence breakdown, approve](public/landing/queue-walkthrough.gif)
+
 | Review queue | Ticket detail |
 |---|---|
 | ![Review queue — filterable, keyboard-navigable list of triaged tickets](docs/screenshots/queue.png) | ![Ticket drawer — reasoning trace, confidence breakdown, cited draft](docs/screenshots/drawer.png) |
 
 ![Reporting dashboard — run integrity, KPIs, confidence calibration, escalation breakdown](docs/screenshots/dashboard.png)
 
-*(Screenshots use synthetic fixture data for illustration — see [Data
-policy](#data-policy).)*
+*(Screenshots and GIFs use synthetic fixture data for illustration — see
+[Data policy](#data-policy).) The deployed app opens on an intro page at `/`
+(features, a walkthrough, an interactive routing calculator that runs the real
+`route()`, results and architecture); **Try now** opens the queue.*
 
 ## Results
 
@@ -137,11 +141,14 @@ src/lib/
   supabase.ts, embeddings.ts  Supabase admin client, OpenRouter embeddings client
 
 src/app/
-  page.tsx                   Review queue (/)
-  dashboard/page.tsx           Reporting dashboard (/dashboard)
+  page.tsx                   Intro / marketing page (/)
+  (app)/layout.tsx             Sidebar shell shared by the working screens
+  (app)/queue/page.tsx         Review queue (/queue)
+  (app)/dashboard/page.tsx     Reporting dashboard (/dashboard)
   actions.ts                    Server action for the approve/edit/reject review write-path
 
 src/components/
+  landing/                      Intro page: animated hero, walkthrough, routing calculator, results, diagrams
   queue/                        Filterable, keyboard-navigable (j/k/Enter) ticket list
   drawer/                        Ticket detail: reasoning trace, confidence breakdown, cited draft, review actions
   dashboard/                     KPI cards, escalation breakdown charts, doc-gap list
@@ -221,7 +228,7 @@ Apply the migrations in `supabase/migrations/` to your Supabase project
 npm run ingest-docs       # crawl + embed the public docs corpus
 npm run generate-tickets  # generate ~40 synthetic tickets
 npm run run-triage        # run every ticket through the agent loop
-npm run dev                # review queue at /, dashboard at /dashboard
+npm run dev                # intro at /, review queue at /queue, dashboard at /dashboard
 ```
 
 ```bash
