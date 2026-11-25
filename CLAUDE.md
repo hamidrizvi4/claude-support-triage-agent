@@ -189,6 +189,15 @@ route(ticket):
       call below; see "Day 3 — retheme" for the new tokens and two real bugs
       the retheme surfaced.
 - [x] Day 4 — pre-public security & polish pass. See "Day 4 — security & polish" below.
+- [x] Intro page — marketing/intro page at `/` (`src/app/page.tsx`,
+      `src/components/landing/`); the working screens moved into the `(app)`
+      route group: queue is now `/queue`, dashboard stays `/dashboard`, and the
+      sidebar shell lives in `src/app/(app)/layout.tsx`. The page is its own
+      scroll container because `globals.css` locks `html, body` (the app shell
+      must never document-scroll). The routing calculator imports the real
+      `route()`, so it can't drift from the agent. `public/landing/*.gif` were
+      recorded from the real UI against synthetic fixtures. Re-record them if
+      the queue, drawer or dashboard UI changes.
 
 ### Day 3 — shared data layer
 `src/lib/data/{types,queries}.ts` is the single place a raw row becomes a

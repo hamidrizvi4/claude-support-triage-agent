@@ -1,13 +1,10 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import styles from "./shell.module.css";
-import { Sidebar } from "@/components/Sidebar";
-import { resolveModel } from "@/lib/model";
 
 export const metadata: Metadata = {
   title: "Triage Control — Claude API Support",
   description:
-    "Review queue and reporting for the Claude API support triage agent.",
+    "An agent that triages Claude API support tickets against Anthropic's public docs, and a rules engine that decides when a human takes over.",
 };
 
 export default function RootLayout({
@@ -32,12 +29,7 @@ export default function RootLayout({
           href="https://fonts.googleapis.com/css2?family=Martian+Mono:wght@400;500;600&display=swap"
         />
       </head>
-      <body>
-        <div className={styles.shell}>
-          <Sidebar model={resolveModel()} />
-          <main className={styles.main}>{children}</main>
-        </div>
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

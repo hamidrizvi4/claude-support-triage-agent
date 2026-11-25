@@ -48,7 +48,7 @@ export async function submitReview(input: {
     .eq("id", input.ticketId);
   if (ticketError) return { ok: false, error: ticketError.message };
 
-  revalidatePath("/");
+  revalidatePath("/queue");
   revalidatePath("/dashboard");
   return { ok: true };
 }
