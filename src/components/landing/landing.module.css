@@ -1584,6 +1584,25 @@
   transform-origin: left center;
 }
 
+.ciTrack {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.ciWhisker {
+  position: absolute;
+  top: 50%;
+  height: 12px;
+  margin-top: -6px;
+  border-left: 1.5px solid var(--text-primary);
+  border-right: 1.5px solid var(--text-primary);
+  background: linear-gradient(var(--text-primary), var(--text-primary)) center / 100% 1.5px no-repeat;
+  pointer-events: none;
+}
+
 .singleVal {
   font-family: var(--font-mono);
   font-size: 13px;

@@ -49,6 +49,20 @@ type Summary = {
     escalationRecallP: number;
   };
   findings: {
+    stats: {
+      tickets: number;
+      escalateTickets: number;
+      completedOnlyRecall: number;
+      completedOnlyRuns: number;
+      recallDiff: number;
+      recallDiffCI: [number, number];
+      unsafeDiff: number;
+      unsafeDiffCI: [number, number];
+      aurcDiff: number;
+      aurcDiffCI: [number, number];
+      blendVsCertainty: number;
+      blendVsCertaintyCI: [number, number];
+    };
     cosine: {
       recallBefore: number;
       recallCosine: number;
@@ -212,6 +226,9 @@ export function Evaluation() {
   const runs = summary.seeds.length;
   const f = summary.findings;
   const ex = summary.exacto;
+  const hardSet = summary.perModel[summary.primary].hard;
+  const hard = hardSet?.variants.find((v) => v.key === summary.shipped);
+  const hardCosine = hardSet?.variants.find((v) => v.key === "after");
 
   return (
     <>
@@ -222,7 +239,7 @@ export function Evaluation() {
             {pct(shipped.escalationRecall.mean, 1)}
           </span>
           <span className={styles.evalWas}>
-            95% CI {pct(shipped.escalationRecallCI[0])}–{pct(shipped.escalationRecallCI[1])}
+            95% CI {pct(shipped.escalationRecallCI[0])}–{pct(shipped.escalationRecallCI[1])}, resampling tickets
           </span>
           <RangeNote r={shipped.escalationRecall} />
         </div>
@@ -249,7 +266,8 @@ export function Evaluation() {
       </div>
       <p className={styles.evalFoot}>
         The shipped routing, <code>{summary.primary}</code>, on the {summary.dataset.core} hand-labeled tickets × {runs} seeds. Incomplete runs
-        count as escalated, as they are in production.
+        count as escalated, as they are in production; on completed runs alone, recall is {pct(f.stats.completedOnlyRecall, 1)}, so failures
+        aren&apos;t propping up the headline.
       </p>
 
       <div className={styles.evalTwo}>
@@ -257,10 +275,17 @@ export function Evaluation() {
           <h3>What the experiments showed</h3>
           <ul className={styles.findings}>
             <li>
-              <b>Cosine similarity was the wrong retrieval signal, so it was rejected.</b> Replacing the model&apos;s self-reported
+              <b>Cosine similarity didn&apos;t earn its place, so it was rejected.</b>{" "}Replacing the model&apos;s self-reported
               retrieval score with the search&apos;s own similarity dropped must-escalate recall from {pct(f.cosine.recallBefore, 1)} to{" "}
-              {pct(f.cosine.recallCosine, 1)}. Ranked alone, cosine did worse than no ranking at all. Similarity says a ticket is on-topic,
-              not that the docs can resolve it.
+              {pct(f.cosine.recallCosine, 1)}, and unsafe auto-resolves rose from {f.cosine.unsafeBefore.toFixed(1)} to{" "}
+              {f.cosine.unsafeCosine.toFixed(1)} per run. Paired by ticket, that gap&apos;s 95% interval is{" "}
+              {(f.stats.recallDiffCI[0] * 100).toFixed(0)} to {(f.stats.recallDiffCI[1] * 100).toFixed(0)} points: every estimate
+              points the same way, but {f.stats.tickets}{" "}tickets can&apos;t call it significant. No evidence it helps, so it didn&apos;t ship.
+            </li>
+            <li>
+              <b>The 0.6 / 0.4 weights are a prior, not a fit.</b> The blend ranks barely better than self-certainty alone (AURC{" "}
+              {f.cosine.aurcModel.toFixed(3)} vs {rc.signals.find((x) => x.key === "certainty")?.aurc.toFixed(3)}; the paired interval spans zero).
+              Fitting weights on {f.stats.tickets}{" "}tickets would just memorize the labels.
             </li>
             <li>
               <b>The safety net works, but this model didn&apos;t need it.</b> On the text alone it catches {f.net.caught} of{" "}
@@ -271,10 +296,17 @@ export function Evaluation() {
               <b>&ldquo;Bug reports always escalate&rdquo; barely fires.</b> Only {f.bug.labeledBug} of {f.bug.total} bug-report runs
               were labeled as bugs. The rest reached a human through low confidence, not the rule.
             </li>
+            {hard && hardCosine && (
+              <li>
+                <b>The hard cases cut the other way.</b> On the {summary.dataset.hard} disguised tickets, shipped recall is{" "}
+                {pct(hard.escalationRecall.mean, 1)}; cosine scores {pct(hardCosine.escalationRecall.mean, 1)}, but only by auto-resolving{" "}
+                {pct(hardCosine.coverage.mean, 0)} of them. Escalating everything is safe and useless.
+              </li>
+            )}
             {ex && (
               <li>
                 <b>Exacto routing helps the same model finish.</b> On <code>{ex.base.model}</code>, completion rose from{" "}
-                {pct(ex.base.completion)} to {pct(ex.exacto.completion)} (p = {ex.completionP.toFixed(2)}) at{" "}
+                {pct(ex.base.completion, 1)} to {pct(ex.exacto.completion, 1)} (p = {ex.completionP.toFixed(3)}) at{" "}
                 {(ex.base.cost / ex.exacto.cost).toFixed(0)}× lower cost per ticket.
               </li>
             )}
@@ -350,8 +382,8 @@ export function Evaluation() {
             their author also wrote the safety net.
           </li>
           <li>
-            <b>Model:</b> <code>{summary.primary}</code>, from a labeled pilot of four cheap, recent tool-calling models: the best
-            router whose full run fit the budget. {runs} seeds per arm. All four arms are scored on the same agent runs, so only the
+            <b>Model:</b> <code>{summary.primary}</code>, screened on a 12-ticket labeled pilot of four cheap, recent tool-calling
+            models: the best router whose full run fit the budget. A screen, not a benchmark. {runs} seeds per arm. All four arms are scored on the same agent runs, so only the
             routing differs.
           </li>
           {ex && (
@@ -361,8 +393,11 @@ export function Evaluation() {
             </li>
           )}
           <li>
-            <b>Caveats:</b> {summary.dataset.core + summary.dataset.hard} tickets is small, so seed ranges and confidence intervals are
-            shown. Doc search ran on an in-memory copy of the same index, spot-checked identical to the database. The live status
+            <b>Statistics:</b> intervals are a percentile bootstrap that resamples tickets with all their seeds, so three runs of
+            one ticket never count as three independent trials. Comparisons between arms are paired on the same runs.
+          </li>
+          <li>
+            <b>Caveats:</b> {summary.dataset.core + summary.dataset.hard} tickets is small, and one labeler wrote the gold labels. Doc search ran on an in-memory copy of the same index, spot-checked identical to the database. The live status
             page was unreachable from the eval sandbox.
           </li>
         </ul>

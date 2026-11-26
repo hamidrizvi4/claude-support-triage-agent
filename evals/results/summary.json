@@ -1,6 +1,6 @@
 {
   "status": "complete",
-  "generatedAt": "2026-11-26T02:51:18.063Z",
+  "generatedAt": "2026-11-26T03:32:29.555Z",
   "seeds": [
     1,
     2,
@@ -37,6 +37,8 @@
           "min": 0.775,
           "max": 0.775
         },
+        "completedRuns": 31,
+        "seedsRun": 1,
         "categoryAccuracy": 0.871,
         "macroF1": 0.864,
         "perClass": {
@@ -162,8 +164,8 @@
               "max": 0.917
             },
             "escalationRecallCI": [
-              0.742,
-              0.977
+              0.793,
+              1
             ],
             "unsafeAutoResolves": {
               "mean": 2,
@@ -211,8 +213,8 @@
               "max": 0.917
             },
             "escalationRecallCI": [
-              0.742,
-              0.977
+              0.793,
+              1
             ],
             "unsafeAutoResolves": {
               "mean": 2,
@@ -260,8 +262,8 @@
               "max": 0.917
             },
             "escalationRecallCI": [
-              0.742,
-              0.977
+              0.793,
+              1
             ],
             "unsafeAutoResolves": {
               "mean": 2,
@@ -309,8 +311,8 @@
               "max": 0.917
             },
             "escalationRecallCI": [
-              0.742,
-              0.977
+              0.793,
+              1
             ],
             "unsafeAutoResolves": {
               "mean": 2,
@@ -613,6 +615,8 @@
           "min": 0.95,
           "max": 0.972
         },
+        "completedRuns": 73,
+        "seedsRun": 2,
         "categoryAccuracy": 0.808,
         "macroF1": 0.82,
         "perClass": {
@@ -738,8 +742,8 @@
               "max": 0.833
             },
             "escalationRecallCI": [
-              0.662,
-              0.891
+              0.636,
+              0.933
             ],
             "unsafeAutoResolves": {
               "mean": 4.5,
@@ -787,8 +791,8 @@
               "max": 0.833
             },
             "escalationRecallCI": [
-              0.662,
-              0.891
+              0.636,
+              0.933
             ],
             "unsafeAutoResolves": {
               "mean": 4.5,
@@ -836,8 +840,8 @@
               "max": 0.875
             },
             "escalationRecallCI": [
-              0.738,
-              0.937
+              0.727,
+              0.977
             ],
             "unsafeAutoResolves": {
               "mean": 3,
@@ -885,8 +889,8 @@
               "max": 0.875
             },
             "escalationRecallCI": [
-              0.738,
-              0.937
+              0.727,
+              0.977
             ],
             "unsafeAutoResolves": {
               "mean": 3,
@@ -1461,6 +1465,8 @@
           "min": 0.85,
           "max": 1
         },
+        "completedRuns": 113,
+        "seedsRun": 3,
         "categoryAccuracy": 0.752,
         "macroF1": 0.78,
         "perClass": {
@@ -1586,8 +1592,8 @@
               "max": 0.958
             },
             "escalationRecallCI": [
-              0.848,
-              0.97
+              0.857,
+              0.987
             ],
             "unsafeAutoResolves": {
               "mean": 1.667,
@@ -1635,8 +1641,8 @@
               "max": 0.958
             },
             "escalationRecallCI": [
-              0.848,
-              0.97
+              0.857,
+              0.987
             ],
             "unsafeAutoResolves": {
               "mean": 1.667,
@@ -1684,8 +1690,8 @@
               "max": 0.958
             },
             "escalationRecallCI": [
-              0.763,
-              0.923
+              0.768,
+              0.94
             ],
             "unsafeAutoResolves": {
               "mean": 3.333,
@@ -1733,8 +1739,8 @@
               "max": 0.958
             },
             "escalationRecallCI": [
-              0.763,
-              0.923
+              0.768,
+              0.94
             ],
             "unsafeAutoResolves": {
               "mean": 3.333,
@@ -2527,6 +2533,8 @@
           "min": 0.917,
           "max": 1
         },
+        "completedRuns": 34,
+        "seedsRun": 3,
         "categoryAccuracy": 0.706,
         "macroF1": 0.585,
         "perClass": {
@@ -2652,8 +2660,8 @@
               "max": 1
             },
             "escalationRecallCI": [
-              0.69,
-              0.957
+              0.704,
+              1
             ],
             "unsafeAutoResolves": {
               "mean": 1,
@@ -2701,8 +2709,8 @@
               "max": 1
             },
             "escalationRecallCI": [
-              0.69,
-              0.957
+              0.704,
+              1
             ],
             "unsafeAutoResolves": {
               "mean": 1,
@@ -2750,8 +2758,8 @@
               "max": 1
             },
             "escalationRecallCI": [
-              0.798,
-              0.993
+              0.857,
+              1
             ],
             "unsafeAutoResolves": {
               "mean": 0.333,
@@ -2799,8 +2807,8 @@
               "max": 1
             },
             "escalationRecallCI": [
-              0.798,
-              0.993
+              0.857,
+              1
             ],
             "unsafeAutoResolves": {
               "mean": 0.333,
@@ -2858,9 +2866,9 @@
       "completed": 31,
       "counts": {
         "tp": 22,
-        "fp": 8,
+        "fp": 7,
         "fn": 2,
-        "tn": 8
+        "tn": 9
       },
       "cost": 0.009113566824999999,
       "latencyS": 22.398275,
@@ -2872,20 +2880,47 @@
       "runs": 40,
       "completed": 38,
       "counts": {
-        "tp": 21,
-        "fp": 7,
-        "fn": 3,
-        "tn": 9
+        "tp": 20,
+        "fp": 4,
+        "fn": 4,
+        "tn": 12
       },
       "cost": 0.0012613079999999996,
       "latencyS": 40.489324999999994,
       "completion": 0.95,
-      "escalationRecall": 0.875
+      "escalationRecall": 0.833
     },
     "completionP": 0.04762516489608773,
-    "escalationRecallP": 1
+    "escalationRecallP": 0.6661718621144658
   },
   "findings": {
+    "stats": {
+      "ciMethod": "95% percentile bootstrap over tickets (all seeds of a ticket resampled together), 4000 resamples, fixed seed",
+      "tickets": 40,
+      "escalateTickets": 24,
+      "completedOnlyRecall": 0.93,
+      "completedOnlyRuns": 71,
+      "recallDiff": 0.069,
+      "recallDiffCI": [
+        0,
+        0.152
+      ],
+      "unsafeDiff": 1.667,
+      "unsafeDiffCI": [
+        0,
+        3.667
+      ],
+      "aurcDiff": 0.09,
+      "aurcDiffCI": [
+        -0.044,
+        0.242
+      ],
+      "blendVsCertainty": 0.006,
+      "blendVsCertaintyCI": [
+        -0.038,
+        0.061
+      ]
+    },
     "cosine": {
       "recallBefore": 0.931,
       "recallCosine": 0.861,

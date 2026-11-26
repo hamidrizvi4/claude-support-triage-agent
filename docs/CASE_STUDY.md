@@ -269,15 +269,17 @@ actually got wrong, and searches an in-memory copy of the same stored vectors
 What the numbers say, generated from the same run:
 
 <!-- eval-notes:start -->
-- **Cosine similarity is the wrong retrieval signal; rejected.** Swapping the model's self-reported retrieval score for the search's own cosine similarity lowered must-escalate recall from 93.1% to 86.1% and raised unsafe auto-resolves from 1.7 to 3.3 per run. As a ranking signal, cosine alone (AURC 0.393) does worse than no ranking at all (0.354). Similarity measures whether a ticket is on-topic for the docs, not whether the docs can resolve it. Production keeps the model's score.
+- **Cosine similarity did not earn its place; rejected.** Swapping the model's self-reported retrieval score for the search's own cosine similarity lowered must-escalate recall from 93.1% to 86.1% and raised unsafe auto-resolves from 1.7 to 3.3 per run. As a ranking signal, cosine alone (AURC 0.393) does worse than no ranking at all (0.354). Similarity measures whether a ticket is on-topic for the docs, not whether the docs can resolve it. Paired over the same runs with a ticket-level bootstrap, the recall gap is 6.9 pts (95% CI 0.0 to 15.2) and the AURC gap 0.090 (-0.044 to 0.242): every gap points the same way, but none is significant on 40 tickets. The decision rests on that: no evidence the change helps and every point estimate says it hurts, so production keeps the model's score.
+- **The 0.6/0.4 weights are a prior, not a fit.** The blend ranks only slightly better than self-certainty alone (AURC gap 0.006, 95% CI -0.038 to 0.061), so the data neither supports nor rules out re-weighting; with 40 tickets, fitting weights would overfit the labels.
 - **The safety net works, but this model didn't need it.** On the ticket text alone it fires on 15/52 tickets, catches 15/19 gold billing/security/sales tickets and makes 0 false hits. It changed 0 routing decisions, because the model had already labeled every one of those tickets correctly. Shipped as a free backstop for a model that mislabels; its misses are the deliberately disguised hard cases.
 - **The "bug reports always escalate" rule barely fires.** Only 5 of 21 bug-report runs were labeled `bug_report`; most were filed as `technical_api_error` and reached a human only through low confidence. Category rules are only as good as the classifier.
-- **Exacto routing helps the same model finish.** On `openai/gpt-oss-120b`, completion went from 77.5% to 95.0% (Fisher p = 0.048) at 7.2× lower cost per ticket; the must-escalate recall difference is not significant (p = 1.00).
+- **Exacto routing helps the same model finish.** On `openai/gpt-oss-120b`, completion went from 77.5% to 95.0% (Fisher p = 0.048) at 7.2× lower cost per ticket; the must-escalate recall difference is not significant (p = 0.67).
 <!-- eval-notes:end -->
 
 The cosine result is the one I'd lead with in an interview. It was my own idea,
-it sounded strictly better on paper, and the labeled eval showed it was worse,
-so it didn't ship. The safety net did ship despite moving zero decisions,
+it sounded strictly better on paper, and the labeled eval found no gain: every
+estimate pointed the wrong way, though 40 tickets can't make any one gap
+significant. With no evidence it helps, it didn't ship. The safety net did ship despite moving zero decisions,
 because its cost is zero and its job is the model you haven't evaluated yet.
 
 ## What I deliberately didn't decide
@@ -320,7 +322,7 @@ building it, not just the code.
 | 13 | Evaluation | The doc index's embedding model was retired upstream (HTTP 410), silently breaking every search, production included | Re-embedded on a live model at the same 2048 dims; model choice now documented as a hard dependency |
 | 14 | Evaluation | Exact vector scan hits the Postgres statement timeout under concurrent load, so the agent got error strings instead of docs | Search retries in production; `0006` migration adds an indexable `halfvec` column; eval searches an in-memory copy |
 | 15 | Evaluation | Half of a first eval batch had silently failed searches; scoring them would have measured the database, not the agent | Discarded; every tool error now recorded, failed searches excluded and retried, first valid record wins |
-| 16 | Evaluation | A cosine-similarity retrieval score, my own proposed fix, routed worse than the model's self-report | Rejected on the evidence; production keeps the model's score |
+| 16 | Evaluation | A cosine-similarity retrieval score, my own proposed fix, showed no gain over the model's self-report | Rejected on the evidence; production keeps the model's score |
 
 ## What I'd do next
 

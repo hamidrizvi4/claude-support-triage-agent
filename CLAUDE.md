@@ -172,9 +172,13 @@ OpenRouter model. Not a real issue at $0/token; revisit only if latency matters.
   covers billing/security/sales only (bug language is too generic for keywords)
   and can only push a ticket toward a human.
 - **Rejected:** `cosineRetrievalScore()` (search's own cosine similarity instead of
-  the model's `retrieval_score`) routed worse — lower must-escalate recall, worse
-  risk-coverage. It stays in `routing.ts` only because the eval scores it as an
-  arm. Don't wire it back into `run-triage` without new evidence.
+  the model's `retrieval_score`) showed no gain: lower must-escalate recall and
+  worse risk-coverage as point estimates, though no gap is significant on 40
+  tickets (paired ticket bootstrap). It stays in `routing.ts` only because the
+  eval scores it as an arm. Don't wire it back into `run-triage` without new evidence.
+- Intervals in the report are a percentile bootstrap over *tickets* (all seeds of
+  a ticket resampled together), not a pooled Wilson interval over runs, which is
+  too narrow because repeated runs of one ticket aren't independent.
 - The eval searches an in-memory copy of the index (`scripts/eval/localIndex.ts`,
   cache in `evals/.cache/`, gitignored) because the live exact scan times out
   under load. `supabase/migrations/0006_halfvec_hnsw_index.sql` fixes that for
