@@ -12,10 +12,11 @@ Gold labels: [`evals/labels.json`](../evals/labels.json) (labeling policy inside
 
 ## Findings
 
-- **Cosine similarity is the wrong retrieval signal; rejected.** Swapping the model's self-reported retrieval score for the search's own cosine similarity lowered must-escalate recall from 93.1% to 86.1% and raised unsafe auto-resolves from 1.7 to 3.3 per run. As a ranking signal, cosine alone (AURC 0.393) does worse than no ranking at all (0.354). Similarity measures whether a ticket is on-topic for the docs, not whether the docs can resolve it. Production keeps the model's score.
+- **Cosine similarity did not earn its place; rejected.** Swapping the model's self-reported retrieval score for the search's own cosine similarity lowered must-escalate recall from 93.1% to 86.1% and raised unsafe auto-resolves from 1.7 to 3.3 per run. As a ranking signal, cosine alone (AURC 0.393) does worse than no ranking at all (0.354). Similarity measures whether a ticket is on-topic for the docs, not whether the docs can resolve it. Paired over the same runs with a ticket-level bootstrap, the recall gap is 6.9 pts (95% CI 0.0 to 15.2) and the AURC gap 0.090 (-0.044 to 0.242): every gap points the same way, but none is significant on 40 tickets. The decision rests on that: no evidence the change helps and every point estimate says it hurts, so production keeps the model's score.
+- **The 0.6/0.4 weights are a prior, not a fit.** The blend ranks only slightly better than self-certainty alone (AURC gap 0.006, 95% CI -0.038 to 0.061), so the data neither supports nor rules out re-weighting; with 40 tickets, fitting weights would overfit the labels.
 - **The safety net works, but this model didn't need it.** On the ticket text alone it fires on 15/52 tickets, catches 15/19 gold billing/security/sales tickets and makes 0 false hits. It changed 0 routing decisions, because the model had already labeled every one of those tickets correctly. Shipped as a free backstop for a model that mislabels; its misses are the deliberately disguised hard cases.
 - **The "bug reports always escalate" rule barely fires.** Only 5 of 21 bug-report runs were labeled `bug_report`; most were filed as `technical_api_error` and reached a human only through low confidence. Category rules are only as good as the classifier.
-- **Exacto routing helps the same model finish.** On `openai/gpt-oss-120b`, completion went from 77.5% to 95.0% (Fisher p = 0.048) at 7.2× lower cost per ticket; the must-escalate recall difference is not significant (p = 1.00).
+- **Exacto routing helps the same model finish.** On `openai/gpt-oss-120b`, completion went from 77.5% to 95.0% (Fisher p = 0.048) at 7.2× lower cost per ticket; the must-escalate recall difference is not significant (p = 0.67).
 
 ## Results — qwen/qwen3.7-flash, original 40 tickets
 
@@ -79,9 +80,9 @@ The headline model has a single provider, so Exacto can't change anything for it
 | Config | Completion | Must-escalate recall | $ / ticket | Latency |
 |---|---:|---:|---:|---:|
 | `openai/gpt-oss-120b` | 77.5% | 91.7% | $0.00911 | 22.4s |
-| `openai/gpt-oss-120b:exacto` | 95.0% | 87.5% | $0.00126 | 40.5s |
+| `openai/gpt-oss-120b:exacto` | 95.0% | 83.3% | $0.00126 | 40.5s |
 
-Fisher exact (pooled runs): completion p = 0.048, must-escalate recall p = 1.000. Only the provider routing differs, so any gap here is Exacto's, not the model's.
+Fisher exact (pooled runs): completion p = 0.048, must-escalate recall p = 0.666. Only the provider routing differs, so any gap here is Exacto's, not the model's.
 
 ## Hard cases (stress test, 12 tickets)
 
@@ -96,13 +97,14 @@ Written by the same author as the safety net, so read these as a stress test rat
 
 ## Caveats
 
-- 52 tickets is small: seed-to-seed ranges and the Wilson interval on must-escalate recall (76.3%–92.3%, pooled) are reported so nothing reads as more precise than it is.
-- Pooled counts treat repeated runs of the same ticket as separate trials; they are not independent, so pooled intervals are optimistic.
+- 52 tickets is small. The 95% interval on the shipped arm's must-escalate recall is 85.7%–98.7%: a bootstrap that resamples the 24 needs-a-human tickets, not the 72 runs, because repeated runs of one ticket are not independent evidence.
+- Incomplete runs count as escalated, which flatters recall for a model that fails often. On completed runs only, the shipped arm's must-escalate recall is 93.0% (71 runs), so the headline is not propped up by failures.
+- Per-seed means of a ratio (e.g. auto-resolve precision) can differ in the last digit from the pooled ratio in the confusion tables.
 - Labels were made by one labeler (Claude) against a written policy; ambiguous calls are noted per ticket in the label files.
 - Seeds are passed through but not every provider honours them; the runs are best read as 3 independent samples.
 - 1 run(s) failed on provider infrastructure (429/5xx/network, or a doc search that errored); 1 were re-run and 0 remain excluded, never counted against the agent. A retry only ever replaces a record that was itself an infrastructure failure.
 - Doc search in the eval runs against an in-memory copy of the same index (same stored vectors, same exact cosine top-k as `match_doc_chunks`), because the live database's exact scan timed out under load. Spot-checked against the live RPC: identical top-5.
 - `check_status` (Anthropic's live status page) was unreachable from the sandbox the eval ran in, so the agent saw a tool error on every status check, identically across configurations. Absolute certainty on error-type tickets may be slightly lower than in production; comparisons between configurations are unaffected.
-- The model was chosen from a 12-ticket, single-seed pilot run before the search fix; a few pilot runs had degraded search. The choice was forced by budget either way: only one candidate's full run fit the $1 budget.
+- The model was chosen from a 12-ticket, single-seed pilot run before the search fix; a few pilot runs had degraded search. The choice was forced by budget either way: only one candidate's full run fit the $1 budget. It ranked candidates by routing accuracy under the then-planned cosine arm, so it was a screen, not a benchmark.
 
 Total eval spend: $0.683.

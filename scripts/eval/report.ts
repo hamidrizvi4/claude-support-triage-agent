@@ -31,6 +31,7 @@ import type { RunRecord } from "./run";
 import {
   aurc,
   autoResolvePrecision,
+  clusterBootstrap,
   autoResolveRecall,
   confusion,
   coverage,
@@ -42,7 +43,6 @@ import {
   quantile,
   riskCoverage,
   routeCounts,
-  wilson,
   type RouteCounts,
 } from "./metrics";
 
@@ -179,6 +179,8 @@ type VariantOut = {
 type SetOut = {
   runs: number;
   completion: R;
+  completedRuns: number;
+  seedsRun: number;
   categoryAccuracy: number;
   macroF1: number;
   perClass: Record<string, { precision: number; recall: number; support: number }>;
@@ -297,12 +299,32 @@ const SIGNALS: { key: SignalKey; label: string; fn: (r: RunRecord) => number }[]
   { key: "model_retrieval", label: "Model-reported retrieval alone", fn: (r) => r.model_retrieval ?? 0 },
 ];
 
+/** Completed runs a threshold could auto-resolve, i.e. not already escalated by the category rule or the net. */
+function rcCandidates(runs: RunRecord[], texts: Map<string, string>): RunRecord[] {
+  return runs.filter((r) => r.completed && r.category && !ESCALATE_CATEGORIES.has(r.category) && !safetyNet(texts.get(r.ticket_id) ?? ""));
+}
+
+/** Every run of one ticket together: the unit a bootstrap resamples. */
+function byTicket<T extends { ticket_id: string }>(xs: T[]): T[][] {
+  return [...groupBy(xs, (x) => x.ticket_id).values()];
+}
+
+/** Must-escalate recall with a 95% interval that resamples tickets, not runs. */
+function recallCI(runs: RunRecord[], v: Variant, gold: Map<string, Gold>, texts: Map<string, string>): number[] {
+  const rows = runs.map((r) => ({
+    ticket_id: r.ticket_id,
+    gold: gold.get(r.ticket_id)!.gold_route === "escalate",
+    pred: predEscalate(r, v, texts.get(r.ticket_id) ?? "").escalate,
+  }));
+  return clusterBootstrap(byTicket(rows), (cs) => {
+    const f = cs.flat().filter((x) => x.gold);
+    return f.length ? f.filter((x) => x.pred).length / f.length : NaN;
+  });
+}
+
 function riskCoverageFor(runs: RunRecord[], gold: Map<string, Gold>, texts: Map<string, string>) {
-  // Same candidate pool for every signal: completed runs a threshold could
-  // auto-resolve, i.e. not already escalated by the category rule or the net.
-  const candidates = runs.filter(
-    (r) => r.completed && r.category && !ESCALATE_CATEGORIES.has(r.category) && !safetyNet(texts.get(r.ticket_id) ?? "")
-  );
+  // Same candidate pool for every signal.
+  const candidates = rcCandidates(runs, texts);
   const total = runs.length;
   const base = candidates.filter((r) => gold.get(r.ticket_id)!.gold_route === "escalate").length / Math.max(1, candidates.length);
   const opt = optimalAurc(candidates.map((r) => ({ error: gold.get(r.ticket_id)!.gold_route === "escalate" })));
@@ -441,7 +463,7 @@ async function main() {
           key: v.key,
           label: v.label,
           escalationRecall: metric((s) => escalationRecall(s.counts)),
-          escalationRecallCI: wilson(c.tp, c.tp + c.fn).map(r3),
+          escalationRecallCI: recallCI(rs, v, gold, texts).map(r3),
           unsafeAutoResolves: metric((s) => s.counts.fn),
           autoResolvePrecision: metric((s) => autoResolvePrecision(s.counts)),
           autoResolveRecall: metric((s) => autoResolveRecall(s.counts)),
@@ -461,6 +483,8 @@ async function main() {
       sets[set] = {
         runs: rs.length,
         completion: { mean: r3(completion.mean), min: r3(completion.min), max: r3(completion.max) },
+        completedRuns: rs.filter((r) => r.completed && r.category).length,
+        seedsRun: new Set(rs.map((r) => r.seed)).size,
         categoryAccuracy: r3(done.filter((r) => r.category === gold.get(r.ticket_id)!.gold_category).length / Math.max(1, done.length)),
         macroF1: r3(f1.macro),
         perClass: Object.fromEntries(Object.entries(f1.perClass).map(([k, v]) => [k, { precision: r3(v.precision), recall: r3(v.recall), support: v.support }])),
@@ -480,7 +504,7 @@ async function main() {
   const baseModel = models.find((m) => !m.endsWith(":exacto") && models.includes(`${m}:exacto`));
   let exacto: { seeds: number[]; base: ExactoSide; exacto: ExactoSide; completionP: number; escalationRecallP: number } | null = null;
   if (baseModel && models.includes(`${baseModel}:exacto`)) {
-    const after = VARIANTS.find((v) => v.key === "after")!;
+    const shippedV = VARIANTS.find((v) => v.key === SHIPPED)!;
     // A seed counts only if both configs finished every core ticket on it.
     const fullSeeds = (m: string) =>
       new Set(
@@ -489,7 +513,7 @@ async function main() {
     const shared = [...fullSeeds(baseModel)].filter((s) => fullSeeds(`${baseModel}:exacto`).has(s));
     const cmp = [baseModel, `${baseModel}:exacto`].map((m) => {
       const rs = byModel.get(m)!.filter((r) => gold.get(r.ticket_id)?.set === "core" && shared.includes(r.seed));
-      const s = score(rs, after, gold, texts);
+      const s = score(rs, shippedV, gold, texts);
       return { model: m, runs: rs.length, completed: s.completed, counts: s.counts, cost: rs.reduce((a, r) => a + r.cost, 0) / rs.length, latencyS: rs.reduce((a, r) => a + r.latency_ms, 0) / rs.length / 1000 };
     });
     const [a, b] = cmp;
@@ -550,7 +574,58 @@ async function main() {
   const beforeCore = v(P, "before");
   const decisionsChanged = (key: string, sets: (SetOut | undefined)[]) =>
     sets.reduce((acc, st) => acc + (st ? v(st, key).netCatches.mean * seeds.length : 0), 0);
+  // Paired, ticket-clustered comparison of shipped vs cosine on the same runs:
+  // both arms route identical agent outputs, so the difference is pure routing.
+  const primaryCore = byModel.get(primary)!.filter((r) => gold.get(r.ticket_id)?.set === "core");
+  const shippedVar = VARIANTS.find((x) => x.key === SHIPPED)!;
+  const cosineVar = VARIANTS.find((x) => x.key === COSINE)!;
+  const paired = primaryCore.map((r) => {
+    const t = texts.get(r.ticket_id) ?? "";
+    return {
+      ticket_id: r.ticket_id,
+      gold: gold.get(r.ticket_id)!.gold_route === "escalate",
+      s: predEscalate(r, shippedVar, t).escalate,
+      c: predEscalate(r, cosineVar, t).escalate,
+    };
+  });
+  const recallOf = (xs: typeof paired, k: "s" | "c") => {
+    const g = xs.filter((x) => x.gold);
+    return g.length ? g.filter((x) => x[k]).length / g.length : NaN;
+  };
+  const unsafeOf = (xs: typeof paired, k: "s" | "c") => xs.filter((x) => x.gold && !x[k]).length / seeds.length;
+  const recallDiffCI = clusterBootstrap(byTicket(paired), (cs) => recallOf(cs.flat(), "s") - recallOf(cs.flat(), "c"));
+  const unsafeDiffCI = clusterBootstrap(byTicket(paired), (cs) => unsafeOf(cs.flat(), "c") - unsafeOf(cs.flat(), "s"));
+  const candScored = rcCandidates(primaryCore, texts).map((r) => ({
+    ticket_id: r.ticket_id,
+    error: gold.get(r.ticket_id)!.gold_route === "escalate",
+    model: computeConfidence(r.model_retrieval ?? 0, r.self_certainty ?? 0),
+    cosine: computeConfidence(cosineRetrievalScore(r.similarities), r.self_certainty ?? 0),
+    certainty: r.self_certainty ?? 0,
+  }));
+  const aurcBy = (xs: typeof candScored, k: "model" | "cosine" | "certainty") => aurc(xs.map((x) => ({ score: x[k], error: x.error })));
+  const aurcDiffCI = clusterBootstrap(byTicket(candScored), (cs) => aurcBy(cs.flat(), "cosine") - aurcBy(cs.flat(), "model"));
+  const blendVsCertaintyCI = clusterBootstrap(byTicket(candScored), (cs) => aurcBy(cs.flat(), "certainty") - aurcBy(cs.flat(), "model"));
+  const completedEsc = primaryCore.filter((r) => r.completed && r.category && gold.get(r.ticket_id)!.gold_route === "escalate");
+  const completedOnlyRecall =
+    completedEsc.filter((r) => predEscalate(r, shippedVar, texts.get(r.ticket_id) ?? "").escalate).length / Math.max(1, completedEsc.length);
+  const excludesZero = (ci: number[]) => ci[0] > 0 || ci[1] < 0;
+  const stats = {
+    ciMethod: "95% percentile bootstrap over tickets (all seeds of a ticket resampled together), 4000 resamples, fixed seed",
+    tickets: new Set(primaryCore.map((r) => r.ticket_id)).size,
+    escalateTickets: dataset.coreEscalate,
+    completedOnlyRecall: r3(completedOnlyRecall),
+    completedOnlyRuns: completedEsc.length,
+    recallDiff: r3(recallOf(paired, "s") - recallOf(paired, "c")),
+    recallDiffCI: recallDiffCI.map(r3),
+    unsafeDiff: r3(unsafeOf(paired, "c") - unsafeOf(paired, "s")),
+    unsafeDiffCI: unsafeDiffCI.map(r3),
+    aurcDiff: r3(aurcBy(candScored, "cosine") - aurcBy(candScored, "model")),
+    aurcDiffCI: aurcDiffCI.map(r3),
+    blendVsCertainty: r3(aurcBy(candScored, "certainty") - aurcBy(candScored, "model")),
+    blendVsCertaintyCI: blendVsCertaintyCI.map(r3),
+  };
   const findings = {
+    stats,
     cosine: {
       recallBefore: beforeCore.escalationRecall.mean,
       recallCosine: cosineCore.escalationRecall.mean,
@@ -573,11 +648,18 @@ async function main() {
 
   md.push(`## Findings`, ``);
   const findingLines = [
-    `- **Cosine similarity is the wrong retrieval signal; rejected.** Swapping the model's self-reported retrieval score for the search's own cosine similarity ` +
+    `- **Cosine similarity did not earn its place; rejected.** Swapping the model's self-reported retrieval score for the search's own cosine similarity ` +
       `lowered must-escalate recall from ${pct(findings.cosine.recallBefore)} to ${pct(findings.cosine.recallCosine)} and raised unsafe auto-resolves from ` +
       `${findings.cosine.unsafeBefore.toFixed(1)} to ${findings.cosine.unsafeCosine.toFixed(1)} per run. As a ranking signal, cosine alone (AURC ${findings.cosine.aurcCosineAlone.toFixed(3)}) ` +
       `does worse than no ranking at all (${findings.cosine.baseRisk.toFixed(3)}). Similarity measures whether a ticket is on-topic for the docs, not whether the docs can resolve it. ` +
-      `Production keeps the model's score.`,
+      `Paired over the same runs with a ticket-level bootstrap, the recall gap is ${(stats.recallDiff * 100).toFixed(1)} pts ` +
+      `(95% CI ${(stats.recallDiffCI[0] * 100).toFixed(1)} to ${(stats.recallDiffCI[1] * 100).toFixed(1)}) and the AURC gap ${stats.aurcDiff.toFixed(3)} ` +
+      `(${stats.aurcDiffCI[0].toFixed(3)} to ${stats.aurcDiffCI[1].toFixed(3)}): ` +
+      `${excludesZero(stats.recallDiffCI) || excludesZero(stats.aurcDiffCI) ? "at least one gap excludes zero" : `every gap points the same way, but none is significant on ${stats.tickets} tickets`}. ` +
+      `The decision rests on that: no evidence the change helps and every point estimate says it hurts, so production keeps the model's score.`,
+    `- **The 0.6/0.4 weights are a prior, not a fit.** The blend ranks only slightly better than self-certainty alone ` +
+      `(AURC gap ${stats.blendVsCertainty.toFixed(3)}, 95% CI ${stats.blendVsCertaintyCI[0].toFixed(3)} to ${stats.blendVsCertaintyCI[1].toFixed(3)}), ` +
+      `so the data neither supports nor rules out re-weighting; with ${stats.tickets} tickets, fitting weights would overfit the labels.`,
     `- **The safety net works, but this model didn't need it.** On the ticket text alone it fires on ${netText.fires}/${netText.tickets} tickets, ` +
       `catches ${netText.caught}/${netText.sensitive} gold billing/security/sales tickets and makes ${netText.falseHits} false hits. It changed ` +
       `${findings.net.decisionsChanged} routing decisions, because the model had already labeled every one of those tickets correctly. Shipped as a free backstop ` +
@@ -651,14 +733,17 @@ async function main() {
 
   md.push(`## Caveats`, ``);
   md.push(
-    `- ${dataset.core + dataset.hard} tickets is small: seed-to-seed ranges and the Wilson interval on must-escalate recall (${pct(v(P, "after").escalationRecallCI[0])}–${pct(v(P, "after").escalationRecallCI[1])}, pooled) are reported so nothing reads as more precise than it is.`,
-    `- Pooled counts treat repeated runs of the same ticket as separate trials; they are not independent, so pooled intervals are optimistic.`,
+    `- ${dataset.core + dataset.hard} tickets is small. The 95% interval on the shipped arm's must-escalate recall is ${pct(v(P, SHIPPED).escalationRecallCI[0])}–${pct(v(P, SHIPPED).escalationRecallCI[1])}: ` +
+      `a bootstrap that resamples the ${stats.escalateTickets} needs-a-human tickets, not the ${stats.escalateTickets * seeds.length} runs, because repeated runs of one ticket are not independent evidence.`,
+    `- Incomplete runs count as escalated, which flatters recall for a model that fails often. On completed runs only, the shipped arm's must-escalate recall is ` +
+      `${pct(stats.completedOnlyRecall)} (${stats.completedOnlyRuns} runs), so the headline is not propped up by failures.`,
+    `- Per-seed means of a ratio (e.g. auto-resolve precision) can differ in the last digit from the pooled ratio in the confusion tables.`,
     `- Labels were made by one labeler (Claude) against a written policy; ambiguous calls are noted per ticket in the label files.`,
     `- Seeds are passed through but not every provider honours them; the runs are best read as ${seeds.length} independent samples.`,
     `- ${infraExcluded} run(s) failed on provider infrastructure (429/5xx/network, or a doc search that errored); ${infraExcluded - infraUnreplaced} were re-run and ${infraUnreplaced} remain excluded, never counted against the agent. A retry only ever replaces a record that was itself an infrastructure failure.`,
     `- Doc search in the eval runs against an in-memory copy of the same index (same stored vectors, same exact cosine top-k as \`match_doc_chunks\`), because the live database's exact scan timed out under load. Spot-checked against the live RPC: identical top-5.`,
     `- \`check_status\` (Anthropic's live status page) was unreachable from the sandbox the eval ran in, so the agent saw a tool error on every status check, identically across configurations. Absolute certainty on error-type tickets may be slightly lower than in production; comparisons between configurations are unaffected.`,
-    `- The model was chosen from a 12-ticket, single-seed pilot run before the search fix; a few pilot runs had degraded search. The choice was forced by budget either way: only one candidate's full run fit the $1 budget.`,
+    `- The model was chosen from a 12-ticket, single-seed pilot run before the search fix; a few pilot runs had degraded search. The choice was forced by budget either way: only one candidate's full run fit the $1 budget. It ranked candidates by routing accuracy under the then-planned cosine arm, so it was a screen, not a benchmark.`,
     ``
   );
   md.push(`Total eval spend: $${models.reduce((a, m) => a + (perModel[m].core?.cost.total ?? 0) + (perModel[m].hard?.cost.total ?? 0), 0).toFixed(3)}.`, ``);

@@ -4,6 +4,8 @@
  */
 import assert from "node:assert";
 import {
+  clusterBootstrap,
+  prng,
   aurc,
   autoResolvePrecision,
   confusion,
@@ -87,5 +89,19 @@ near(aurc([{ score: 1, error: false }, { score: 1, error: true }]), (1 + 0.5) / 
 
 near(quantile([1, 2, 3, 4, 5], 0.5), 3);
 near(quantile([0, 10], 0.1), 1);
+
+// Cluster bootstrap: deterministic, brackets the point estimate, and is wider
+// than a Wilson interval that wrongly treats 3 identical runs per ticket as 3 trials.
+{
+  const clusters = Array.from({ length: 20 }, (_, i) => [0, 1, 2].map(() => (i < 15 ? 1 : 0)));
+  const mean = (cs: number[][]) => cs.flat().reduce((a, b) => a + b, 0) / cs.flat().length;
+  const a = clusterBootstrap(clusters, mean, 2000, 7);
+  const b = clusterBootstrap(clusters, mean, 2000, 7);
+  assert.deepStrictEqual(a, b);
+  assert.ok(a[0] < 0.75 && a[1] > 0.75);
+  const w = wilson(45, 60);
+  assert.ok(a[1] - a[0] > w[1] - w[0], "clustered interval should be wider than pooled Wilson");
+  near(prng(1)(), prng(1)());
+}
 
 console.log("metrics.selftest: all assertions passed");

@@ -59,8 +59,9 @@ export function routeTicket(input: {
  * the 10th / 90th percentiles of best-match similarity across the eval runs,
  * set without labels) onto 0–1.
  *
- * It routed worse than the model's self-reported score: lower must-escalate
- * recall and a worse risk-coverage curve. Similarity measures whether a
+ * It did not beat the model's self-reported score: every estimate pointed the
+ * wrong way (lower must-escalate recall, worse risk-coverage), though on 40
+ * tickets no gap was significant. Similarity measures whether a
  * ticket is on-topic for the docs, not whether the docs can resolve it — a
  * billing dispute about the API sits very close to the API docs. See
  * docs/EVALUATION.md.

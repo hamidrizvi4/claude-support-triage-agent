@@ -107,8 +107,8 @@ async function main() {
       const run = await runAgentDetailed(ticket);
       resolution = run.resolution;
       // Retrieval stays the model's own score: the labeled eval tested replacing
-      // it with the search's cosine similarity and that routed worse (lower
-      // must-escalate recall, worse risk-coverage). See docs/EVALUATION.md.
+      // it with the search's cosine similarity, and that showed no gain (every
+      // estimate pointed the wrong way, none significant). See docs/EVALUATION.md.
       // The safety net re-checks the ticket text for the always-escalate
       // categories, independent of the model's label.
       decision = routeTicket({

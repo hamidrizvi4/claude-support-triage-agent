@@ -47,20 +47,26 @@ function Arrow() {
   );
 }
 
-const STATS = [
-  { v: "40", l: "synthetic tickets in the eval set" },
-  { v: "5", l: "tools, one forced final call" },
-  { v: "≤ 8", l: "agent turns per ticket" },
-  { v: "0.8", l: "blended-confidence threshold" },
-  { v: "4", l: "categories that always escalate" },
-  { v: "$0.25", l: "for the full paid 40-ticket run" },
-];
+/** Headline numbers, read from the generated eval summary so they can't go stale. */
+const STATS = (() => {
+  const d = evalSummary.dataset;
+  const core = evalSummary.perModel[evalSummary.primary as keyof typeof evalSummary.perModel].core;
+  const shipped = core.variants.find((x) => x.key === evalSummary.shipped)!;
+  return [
+    { v: String(d.core + d.hard), l: `hand-labeled tickets × ${evalSummary.seeds.length} seeds` },
+    { v: `${(shipped.escalationRecall.mean * 100).toFixed(1)}%`, l: "must-escalate recall, shipped routing" },
+    { v: shipped.unsafeAutoResolves.mean.toFixed(1), l: `unsafe auto-resolves per ${d.core}-ticket run` },
+    { v: `${(shipped.coverage.mean * 100).toFixed(0)}%`, l: "of tickets resolved without a human" },
+    { v: "4", l: "categories that always escalate" },
+    { v: `$${core.cost.perTicket.toFixed(4)}`, l: "per ticket on the headline model" },
+  ];
+})();
 
 const ENGINEERING = [
   {
     key: "Evaluation",
     title: "Hand labels, not vibes",
-    body: "Every ticket has a gold category and route. Three seeds per configuration, and four routing variants scored on the same agent runs, so only the routing differs between them.",
+    body: "Every ticket has a gold category and route. Three seeds per configuration, four routing variants scored on the same agent runs, and intervals that resample tickets rather than runs, so repeats never pose as evidence.",
     where: "docs/EVALUATION.md",
   },
   {
@@ -102,7 +108,7 @@ const ENGINEERING = [
   {
     key: "Known limits",
     title: "What it doesn't do yet",
-    body: "Retrieval confidence is the model's own score: cosine similarity was tested as a replacement and routed worse. Bug reports are mostly misfiled, so their hard rule rarely fires. Exact vector search needs the 0006 index migration. No auth in v1.",
+    body: "Both confidence signals are the model's own: cosine similarity was tested as an objective replacement and showed no gain. The 0.6/0.4 weights are a prior, untuned. Bug reports are mostly misfiled, so their hard rule rarely fires. Exact vector search needs the 0006 index migration. No auth in v1.",
     where: "docs/EVALUATION.md",
     limit: true,
   },
@@ -132,13 +138,13 @@ export default function IntroPage() {
             </span>
           </Link>
           <nav className={styles.navLinks} aria-label="Sections">
-            <a className={styles.navLink} href="#agent">Agent</a>
-            <a className={styles.navLink} href="#walkthrough">Walkthrough</a>
             <a className={styles.navLink} href="#routing">Routing math</a>
-            <a className={styles.navLink} href="#results">Results</a>
             {evalSummary.status === "complete" && (
               <a className={styles.navLink} href="#evaluation">Evaluation</a>
             )}
+            <a className={styles.navLink} href="#results">Models</a>
+            <a className={styles.navLink} href="#agent">Agent</a>
+            <a className={styles.navLink} href="#walkthrough">Walkthrough</a>
             <a className={styles.navLink} href="#engineering">Engineering</a>
           </nav>
           <div className={styles.navCtas}>
@@ -169,8 +175,8 @@ export default function IntroPage() {
               <Link className={`${styles.btn} ${styles.btnResolve}`} href="/queue">
                 Try the review queue <Arrow />
               </Link>
-              <a className={`${styles.btn} ${styles.btnGhost}`} href="#routing">
-                See the routing math
+              <a className={`${styles.btn} ${styles.btnGhost}`} href="#evaluation">
+                See how it was evaluated
               </a>
             </div>
             <p className={styles.heroNote}>Live demo · synthetic tickets · mocked accounts · no sign-in</p>
@@ -186,6 +192,75 @@ export default function IntroPage() {
             </div>
           ))}
         </div>
+
+        {/* ── Routing math ── */}
+        <section className={styles.section} id="routing">
+          <span className={styles.eyebrow}>/the math behind it</span>
+          <h2 className={styles.h2}>The model reports. The rules decide.</h2>
+          <p className={styles.lede}>
+            Confidence is a 60/40 blend of two numbers the model reports: how well the docs it found
+            match the question, and how sure it is of its answer.
+            Four categories skip that math entirely. Drag the sliders: this panel runs the same{" "}
+            <code>route()</code> the agent uses.
+          </p>
+          <RoutingLab />
+          <div className={styles.why}>
+            <div className={styles.whyItem}>
+              <span className={styles.mono}>why two signals</span>
+              <h4>A doc gap isn&apos;t the same as doubt</h4>
+              <p>
+                Retrieval and certainty stay as two visible numbers, not one opaque score. A reviewer can
+                tell &ldquo;the docs didn&apos;t cover this&rdquo; from &ldquo;the docs covered it but the model
+                wasn&apos;t sure&rdquo;, and the first one becomes a doc-gap signal.
+              </p>
+            </div>
+            <div className={styles.whyItem}>
+              <span className={styles.mono}>why 0.6 / 0.4</span>
+              <h4>A prior, stated plainly</h4>
+              <p>
+                retrieval_score is tied to docs the agent actually fetched; self_certainty is pure
+                introspection, so it gets less weight. The weights were set before any labels existed and
+                left untuned: the eval finds the blend only marginally ahead of certainty alone. The
+                geometry is strict: at full certainty, retrieval must still reach 0.67; with perfect
+                retrieval, certainty needs 0.5.
+              </p>
+            </div>
+            <div className={styles.whyItem}>
+              <span className={styles.mono}>why hard rules</span>
+              <h4>Asymmetric cost gets a category, not a probability</h4>
+              <p>
+                A slow answer on a rate-limit question is cheap. A wrong autonomous answer on a refund,
+                a security report, a sales deal or a bug is not. Those four always reach a human,
+                however confident the model claims to be.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Evaluation (only once a labeled run has been scored) ── */}
+        {evalSummary.status === "complete" && (
+          <section className={styles.section} id="evaluation">
+            <span className={styles.eyebrow}>/evaluation</span>
+            <h2 className={styles.h2}>Scored against hand labels, including what didn&apos;t work.</h2>
+            <p className={styles.lede}>
+              Every ticket has a gold label for where it should go. The headline metric is <b>must-escalate recall</b>: of the
+              tickets that need a human, how many reached one. The expensive failure is an agent that confidently answers a billing
+              dispute or a security report, so that&apos;s the number to protect.
+            </p>
+            <Evaluation />
+          </section>
+        )}
+
+        {/* ── Results ── */}
+        <section className={styles.section} id="results">
+          <span className={styles.eyebrow}>/models &amp; cost</span>
+          <h2 className={styles.h2}>Which model, and what finishing costs.</h2>
+          <p className={styles.lede}>
+            The labeled runs, compared by model and by provider routing. Safety comes from the router; the
+            model mostly decides how often the agent finishes, and at what price.
+          </p>
+          <Results />
+        </section>
 
         {/* ── Agent ── */}
         <section className={styles.section} id="agent">
@@ -346,83 +421,6 @@ export default function IntroPage() {
           </div>
         </section>
 
-        {/* ── Routing math ── */}
-        <section className={styles.section} id="routing">
-          <span className={styles.eyebrow}>/the math behind it</span>
-          <h2 className={styles.h2}>The model reports. The rules decide.</h2>
-          <p className={styles.lede}>
-            Confidence is a 60/40 blend of how well the docs matched and how sure the model says it is.
-            Four categories skip that math entirely. Drag the sliders: this panel runs the same{" "}
-            <code>route()</code> the agent uses.
-          </p>
-          <RoutingLab />
-          <div className={styles.why}>
-            <div className={styles.whyItem}>
-              <span className={styles.mono}>why two signals</span>
-              <h4>A doc gap isn&apos;t the same as doubt</h4>
-              <p>
-                Retrieval and certainty stay as two visible numbers, not one opaque score. A reviewer can
-                tell &ldquo;the docs didn&apos;t cover this&rdquo; from &ldquo;the docs covered it but the model
-                wasn&apos;t sure&rdquo;, and the first one becomes a doc-gap signal.
-              </p>
-            </div>
-            <div className={styles.whyItem}>
-              <span className={styles.mono}>why 0.6 / 0.4</span>
-              <h4>Weight the docs above the gut</h4>
-              <p>
-                retrieval_score rates the docs that were found; self_certainty rates the model&apos;s own
-                answer, the easier signal to inflate, so it gets the smaller weight. The geometry
-                is strict: even at full certainty, retrieval must reach 0.67. With perfect retrieval,
-                certainty still needs 0.5.
-              </p>
-            </div>
-            <div className={styles.whyItem}>
-              <span className={styles.mono}>why hard rules</span>
-              <h4>Asymmetric cost gets a category, not a probability</h4>
-              <p>
-                A slow answer on a rate-limit question is cheap. A wrong autonomous answer on a refund,
-                a security report, a sales deal or a bug is not. Those four always reach a human,
-                however confident the model claims to be.
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {/* ── Results ── */}
-        <section className={styles.section} id="results">
-          <span className={styles.eyebrow}>/results</span>
-          <h2 className={styles.h2}>What &ldquo;free&rdquo; actually costs.</h2>
-          <Results />
-        </section>
-
-        {/* ── Evaluation (only once a labeled run has been scored) ── */}
-        {evalSummary.status === "complete" && (
-          <section className={styles.section} id="evaluation">
-            <span className={styles.eyebrow}>/evaluation</span>
-            <h2 className={styles.h2}>Scored against hand labels, including what didn&apos;t work.</h2>
-            <p className={styles.lede}>
-              Every ticket has a gold label for where it should go. The headline metric is <b>must-escalate recall</b>: of the
-              tickets that need a human, how many reached one. The expensive failure is an agent that confidently answers a billing
-              dispute or a security report, so that&apos;s the number to protect.
-            </p>
-            <Evaluation />
-          </section>
-        )}
-
-        {/* ── Architecture ── */}
-        <section className={styles.section} id="architecture">
-          <span className={styles.eyebrow}>/architecture</span>
-          <h2 className={styles.h2}>Three lanes, one source of truth.</h2>
-          <p className={styles.lede}>
-            Ingestion runs once. The agent runs per ticket. Audit and review data accumulate underneath,
-            and the queue and dashboard both read them through one shared classification layer, so they
-            can never disagree about a number.
-          </p>
-          <div className={`${styles.card} ${styles.archWrap}`}>
-            <ArchitectureDiagram />
-          </div>
-        </section>
-
         {/* ── Engineering ── */}
         <section className={styles.section} id="engineering">
           <span className={styles.eyebrow}>/engineering notes</span>
@@ -448,6 +446,20 @@ export default function IntroPage() {
                 {s.n} <span>{s.s}</span>
               </span>
             ))}
+          </div>
+        </section>
+
+        {/* ── Architecture ── */}
+        <section className={styles.section} id="architecture">
+          <span className={styles.eyebrow}>/architecture</span>
+          <h2 className={styles.h2}>Three lanes, one source of truth.</h2>
+          <p className={styles.lede}>
+            Ingestion runs once. The agent runs per ticket. Audit and review data accumulate underneath,
+            and the queue and dashboard both read them through one shared classification layer, so they
+            can never disagree about a number.
+          </p>
+          <div className={`${styles.card} ${styles.archWrap}`}>
+            <ArchitectureDiagram />
           </div>
         </section>
 
