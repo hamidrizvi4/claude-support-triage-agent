@@ -1,0 +1,114 @@
+{
+  "description": "Hard cases written by the same author as the safety net, to probe where category routing breaks: sensitive tickets phrased as routine questions, routine questions that sound sensitive, and questions the docs can't answer. Because the author of these cases also wrote the safety net, results on this set are reported separately and should be read as a stress test, not an unbiased estimate.",
+  "labeler": "Claude, labels fixed when the cases were written.",
+  "tickets": [
+    {
+      "id": "hard-01",
+      "kind": "disguised_sensitive",
+      "subject": "Do unused credits roll over month to month?",
+      "body": "Quick question on how prepaid credits work. Do unused credits carry over into next month? Asking because we were charged for the same $500 top-up twice yesterday and only meant to buy it once, so we'll have a lot left over either way.",
+      "gold_category": "billing",
+      "gold_route": "escalate",
+      "rationale": "A duplicate charge buried inside a docs-style question."
+    },
+    {
+      "id": "hard-02",
+      "kind": "disguised_sensitive",
+      "subject": "Is the usage page showing the wrong timezone?",
+      "body": "Our usage page shows a few hundred requests between 2am and 4am our time, from IP ranges we don't recognize. Nobody on the team works at that hour. Is the usage page maybe displaying UTC instead of local time, or is there a timezone setting somewhere?",
+      "gold_category": "security_abuse",
+      "gold_route": "escalate",
+      "rationale": "Unrecognized IPs at odd hours is a possible key compromise, framed as a UI question."
+    },
+    {
+      "id": "hard-03",
+      "kind": "disguised_sensitive",
+      "subject": "How do we get to 20k requests per minute?",
+      "body": "We're currently at 4,000 RPM and will need around 20,000 RPM for a launch in March. What's the process to get there? We'd be comfortable committing to roughly $40k a month if the pricing works out for us.",
+      "gold_category": "sales_enterprise",
+      "gold_route": "escalate",
+      "rationale": "A spend commitment and custom limits make this a sales conversation, not a docs lookup."
+    },
+    {
+      "id": "hard-04",
+      "kind": "disguised_sensitive",
+      "subject": "KeyError 'content' when streaming after upgrading the Python SDK",
+      "body": "Since upgrading the Python SDK from 0.39 to 0.40, every streamed response raises KeyError: 'content' right after the message_stop event. Same code, same model, no other changes. Rolling back to 0.39 fixes it. Is something different about how streaming should be consumed now?",
+      "gold_category": "bug_report",
+      "gold_route": "escalate",
+      "rationale": "A version-specific regression with a clean repro: an SDK bug, phrased as a how-to."
+    },
+    {
+      "id": "hard-05",
+      "kind": "benign_lookalike",
+      "subject": "How is prompt caching billed?",
+      "body": "Trying to estimate costs before we turn on prompt caching. How are cache writes billed compared to normal input tokens, and how much cheaper are cache reads?",
+      "gold_category": "feature_question",
+      "gold_route": "auto_resolve",
+      "rationale": "Says 'billed' but asks about documented pricing, not a charge on the account."
+    },
+    {
+      "id": "hard-06",
+      "kind": "benign_lookalike",
+      "subject": "Best way to store our API key in GitHub Actions",
+      "body": "We're adding Claude calls to our CI pipeline. What's the recommended way to store the API key in a GitHub Actions workflow so it never ends up leaking into logs or the repo?",
+      "gold_category": "feature_question",
+      "gold_route": "auto_resolve",
+      "rationale": "Sounds like security, but it's a best-practice question with a documented answer and no incident."
+    },
+    {
+      "id": "hard-07",
+      "kind": "benign_lookalike",
+      "subject": "Is the Batch API cheaper than normal requests?",
+      "body": "We run a nightly job over about 30k documents and latency doesn't matter. Is there a pricing discount for using the Message Batches API instead of regular requests, and does it apply to output tokens too?",
+      "gold_category": "feature_question",
+      "gold_route": "auto_resolve",
+      "rationale": "A pricing question with a documented answer (batch discount)."
+    },
+    {
+      "id": "hard-08",
+      "kind": "benign_lookalike",
+      "subject": "Image size limits for vision requests",
+      "body": "What's the maximum image size we can send, which formats are supported, and how many images can go in a single request?",
+      "gold_category": "feature_question",
+      "gold_route": "auto_resolve",
+      "rationale": "Documented limits; a control case that every config should resolve."
+    },
+    {
+      "id": "hard-09",
+      "kind": "doc_gap",
+      "subject": "Will the Files API support .docx uploads?",
+      "body": "Most of our users have Word documents. Is native .docx upload support planned for the Files API, and is there a rough timeline? Converting everything to PDF first is adding a lot of friction.",
+      "gold_category": "feature_question",
+      "gold_route": "escalate",
+      "rationale": "A roadmap question; the public docs can't promise future support."
+    },
+    {
+      "id": "hard-10",
+      "kind": "doc_gap",
+      "subject": "Higher time-to-first-token from Singapore",
+      "body": "Requests from our Singapore servers see roughly 900ms higher time-to-first-token than the same requests from Virginia. Which region should we deploy in to minimize latency, and is there anything we can configure to route requests closer?",
+      "gold_category": "technical_api_error",
+      "gold_route": "escalate",
+      "rationale": "Region-specific latency needs investigation the docs don't cover."
+    },
+    {
+      "id": "hard-11",
+      "kind": "doc_gap",
+      "subject": "Locked out of the Console after losing my 2FA device",
+      "body": "I lost the phone with my authenticator app and can't sign in to the Console for our organization. I'm the only admin. How do I get back in?",
+      "gold_category": "account_access",
+      "gold_route": "escalate",
+      "rationale": "Account recovery needs identity verification by a human; not resolvable by a docs answer."
+    },
+    {
+      "id": "hard-12",
+      "kind": "disguised_sensitive",
+      "subject": "Can I see which API key made each request?",
+      "body": "Is there a way to break usage down by API key, request by request? One of our engineers may have pasted our production key into a public Discord channel yesterday and we want to see if anything looks off.",
+      "gold_category": "security_abuse",
+      "gold_route": "escalate",
+      "rationale": "A probable key exposure, framed as a reporting question."
+    }
+  ]
+}

@@ -151,6 +151,9 @@ export function reasonLabel(reason: string | null): string {
   if (reason.startsWith("category:")) {
     return `Always escalates — ${categoryLabel(reason.slice("category:".length))}`;
   }
+  if (reason.startsWith("safety_net:")) {
+    return `Safety net — ${categoryLabel(reason.slice("safety_net:".length))}`;
+  }
   if (reason === "low_confidence") return "Low confidence";
   if (reason.includes("429") || reason.includes("Rate limit")) return "Rate limited";
   if (reason.includes("did not call submit_resolution")) return "No resolution submitted";

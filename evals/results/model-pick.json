@@ -1,0 +1,52 @@
+{
+  "picked": "qwen/qwen3.7-flash",
+  "rule": "highest routing accuracy (cosine + safety net) on the labeled pilot, then must-escalate recall, then category accuracy, then price — among models whose projected main run fits the budget",
+  "budget": 0.62,
+  "mainRuns": 312,
+  "rows": [
+    {
+      "model": "deepseek/deepseek-v4-flash",
+      "runs": 12,
+      "completion": 1,
+      "routingAccuracy": 0.8333333333333334,
+      "escalationRecall": 0.8333333333333334,
+      "categoryAccuracy": 0.9166666666666666,
+      "costPerTicket": 0.005815493666666667,
+      "latencyS": 62.976,
+      "projectedMainRun": 1.814434024
+    },
+    {
+      "model": "qwen/qwen3.7-flash",
+      "runs": 12,
+      "completion": 1,
+      "routingAccuracy": 0.75,
+      "escalationRecall": 0.8333333333333334,
+      "categoryAccuracy": 0.6666666666666666,
+      "costPerTicket": 0.0016612099999999998,
+      "latencyS": 70.74316666666667,
+      "projectedMainRun": 0.51829752
+    },
+    {
+      "model": "openai/gpt-6-luna",
+      "runs": 12,
+      "completion": 1,
+      "routingAccuracy": 0.6666666666666666,
+      "escalationRecall": 0.8333333333333334,
+      "categoryAccuracy": 0.75,
+      "costPerTicket": 0.002555152916666667,
+      "latencyS": 45.1275,
+      "projectedMainRun": 0.79720771
+    },
+    {
+      "model": "anthropic/claude-haiku-5.5",
+      "runs": 12,
+      "completion": 1,
+      "routingAccuracy": 0.5833333333333334,
+      "escalationRecall": 1,
+      "categoryAccuracy": 0.6666666666666666,
+      "costPerTicket": 0.0030490416666666665,
+      "latencyS": 38.90225,
+      "projectedMainRun": 0.951301
+    }
+  ]
+}

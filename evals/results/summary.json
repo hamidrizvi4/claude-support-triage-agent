@@ -1,0 +1,2912 @@
+{
+  "status": "complete",
+  "generatedAt": "2026-11-26T02:51:18.063Z",
+  "seeds": [
+    1,
+    2,
+    3
+  ],
+  "models": [
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-120b:exacto",
+    "qwen/qwen3.7-flash"
+  ],
+  "primary": "qwen/qwen3.7-flash",
+  "dataset": {
+    "core": 40,
+    "hard": 12,
+    "coreEscalate": 24,
+    "coreAuto": 16
+  },
+  "cosine": {
+    "p10": 0.814,
+    "p50": 0.886,
+    "p90": 0.922,
+    "floor": 0.81,
+    "ceil": 0.92
+  },
+  "shipped": "net_only",
+  "infraExcluded": 1,
+  "infraUnreplaced": 0,
+  "perModel": {
+    "openai/gpt-oss-120b": {
+      "core": {
+        "runs": 40,
+        "completion": {
+          "mean": 0.775,
+          "min": 0.775,
+          "max": 0.775
+        },
+        "categoryAccuracy": 0.871,
+        "macroF1": 0.864,
+        "perClass": {
+          "technical_api_error": {
+            "precision": 0.714,
+            "recall": 1,
+            "support": 5
+          },
+          "feature_question": {
+            "precision": 0.857,
+            "recall": 0.857,
+            "support": 7
+          },
+          "account_access": {
+            "precision": 0,
+            "recall": 0,
+            "support": 0
+          },
+          "billing": {
+            "precision": 0.857,
+            "recall": 1,
+            "support": 6
+          },
+          "security_abuse": {
+            "precision": 1,
+            "recall": 1,
+            "support": 4
+          },
+          "sales_enterprise": {
+            "precision": 1,
+            "recall": 1,
+            "support": 4
+          },
+          "bug_report": {
+            "precision": 1,
+            "recall": 0.4,
+            "support": 5
+          }
+        },
+        "categoryConfusion": {
+          "labels": [
+            "technical_api_error",
+            "feature_question",
+            "account_access",
+            "billing",
+            "security_abuse",
+            "sales_enterprise",
+            "bug_report"
+          ],
+          "matrix": [
+            [
+              5,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              6,
+              0,
+              1,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              6,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              4,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              4,
+              0
+            ],
+            [
+              2,
+              1,
+              0,
+              0,
+              0,
+              0,
+              2
+            ]
+          ]
+        },
+        "variants": [
+          {
+            "key": "before",
+            "label": "Original routing (model-reported retrieval)",
+            "escalationRecall": {
+              "mean": 0.917,
+              "min": 0.917,
+              "max": 0.917
+            },
+            "escalationRecallCI": [
+              0.742,
+              0.977
+            ],
+            "unsafeAutoResolves": {
+              "mean": 2,
+              "min": 2,
+              "max": 2
+            },
+            "autoResolvePrecision": {
+              "mean": 0.818,
+              "min": 0.818,
+              "max": 0.818
+            },
+            "autoResolveRecall": {
+              "mean": 0.563,
+              "min": 0.563,
+              "max": 0.563
+            },
+            "coverage": {
+              "mean": 0.275,
+              "min": 0.275,
+              "max": 0.275
+            },
+            "sensitiveRecall": {
+              "mean": 0.909,
+              "min": 0.909,
+              "max": 0.909
+            },
+            "netCatches": {
+              "mean": 0,
+              "min": 0,
+              "max": 0
+            },
+            "pooled": {
+              "tp": 22,
+              "fp": 7,
+              "fn": 2,
+              "tn": 9
+            }
+          },
+          {
+            "key": "net_only",
+            "label": "Original + safety net — shipped",
+            "escalationRecall": {
+              "mean": 0.917,
+              "min": 0.917,
+              "max": 0.917
+            },
+            "escalationRecallCI": [
+              0.742,
+              0.977
+            ],
+            "unsafeAutoResolves": {
+              "mean": 2,
+              "min": 2,
+              "max": 2
+            },
+            "autoResolvePrecision": {
+              "mean": 0.818,
+              "min": 0.818,
+              "max": 0.818
+            },
+            "autoResolveRecall": {
+              "mean": 0.563,
+              "min": 0.563,
+              "max": 0.563
+            },
+            "coverage": {
+              "mean": 0.275,
+              "min": 0.275,
+              "max": 0.275
+            },
+            "sensitiveRecall": {
+              "mean": 0.909,
+              "min": 0.909,
+              "max": 0.909
+            },
+            "netCatches": {
+              "mean": 0,
+              "min": 0,
+              "max": 0
+            },
+            "pooled": {
+              "tp": 22,
+              "fp": 7,
+              "fn": 2,
+              "tn": 9
+            }
+          },
+          {
+            "key": "cosine_only",
+            "label": "Cosine retrieval instead — rejected",
+            "escalationRecall": {
+              "mean": 0.917,
+              "min": 0.917,
+              "max": 0.917
+            },
+            "escalationRecallCI": [
+              0.742,
+              0.977
+            ],
+            "unsafeAutoResolves": {
+              "mean": 2,
+              "min": 2,
+              "max": 2
+            },
+            "autoResolvePrecision": {
+              "mean": 0.8,
+              "min": 0.8,
+              "max": 0.8
+            },
+            "autoResolveRecall": {
+              "mean": 0.5,
+              "min": 0.5,
+              "max": 0.5
+            },
+            "coverage": {
+              "mean": 0.25,
+              "min": 0.25,
+              "max": 0.25
+            },
+            "sensitiveRecall": {
+              "mean": 0.909,
+              "min": 0.909,
+              "max": 0.909
+            },
+            "netCatches": {
+              "mean": 0,
+              "min": 0,
+              "max": 0
+            },
+            "pooled": {
+              "tp": 22,
+              "fp": 8,
+              "fn": 2,
+              "tn": 8
+            }
+          },
+          {
+            "key": "after",
+            "label": "Cosine retrieval + safety net — rejected",
+            "escalationRecall": {
+              "mean": 0.917,
+              "min": 0.917,
+              "max": 0.917
+            },
+            "escalationRecallCI": [
+              0.742,
+              0.977
+            ],
+            "unsafeAutoResolves": {
+              "mean": 2,
+              "min": 2,
+              "max": 2
+            },
+            "autoResolvePrecision": {
+              "mean": 0.8,
+              "min": 0.8,
+              "max": 0.8
+            },
+            "autoResolveRecall": {
+              "mean": 0.5,
+              "min": 0.5,
+              "max": 0.5
+            },
+            "coverage": {
+              "mean": 0.25,
+              "min": 0.25,
+              "max": 0.25
+            },
+            "sensitiveRecall": {
+              "mean": 0.909,
+              "min": 0.909,
+              "max": 0.909
+            },
+            "netCatches": {
+              "mean": 0,
+              "min": 0,
+              "max": 0
+            },
+            "pooled": {
+              "tp": 22,
+              "fp": 8,
+              "fn": 2,
+              "tn": 8
+            }
+          }
+        ],
+        "riskCoverage": {
+          "candidates": 14,
+          "total": 40,
+          "baseRisk": 0.286,
+          "optimalAurc": 0.055,
+          "signals": [
+            {
+              "key": "blend_cosine",
+              "label": "0.6·cosine + 0.4·certainty (rejected)",
+              "aurc": 0.104,
+              "points": [
+                {
+                  "c": 0.1,
+                  "r": 0
+                },
+                {
+                  "c": 0.125,
+                  "r": 0
+                },
+                {
+                  "c": 0.15,
+                  "r": 0
+                },
+                {
+                  "c": 0.175,
+                  "r": 0
+                },
+                {
+                  "c": 0.2,
+                  "r": 0.125
+                },
+                {
+                  "c": 0.225,
+                  "r": 0.111
+                },
+                {
+                  "c": 0.25,
+                  "r": 0.2
+                },
+                {
+                  "c": 0.275,
+                  "r": 0.182
+                },
+                {
+                  "c": 0.3,
+                  "r": 0.25
+                },
+                {
+                  "c": 0.325,
+                  "r": 0.308
+                },
+                {
+                  "c": 0.35,
+                  "r": 0.286
+                }
+              ],
+              "at08": {
+                "coverage": 0.25,
+                "risk": 0.2,
+                "automated": 10
+              }
+            },
+            {
+              "key": "blend_model",
+              "label": "0.6·model-reported + 0.4·certainty (shipped)",
+              "aurc": 0.069,
+              "points": [
+                {
+                  "c": 0.075,
+                  "r": 0
+                },
+                {
+                  "c": 0.15,
+                  "r": 0
+                },
+                {
+                  "c": 0.2,
+                  "r": 0
+                },
+                {
+                  "c": 0.225,
+                  "r": 0
+                },
+                {
+                  "c": 0.25,
+                  "r": 0.1
+                },
+                {
+                  "c": 0.275,
+                  "r": 0.182
+                },
+                {
+                  "c": 0.3,
+                  "r": 0.167
+                },
+                {
+                  "c": 0.325,
+                  "r": 0.231
+                },
+                {
+                  "c": 0.35,
+                  "r": 0.286
+                }
+              ],
+              "at08": {
+                "coverage": 0.275,
+                "risk": 0.18181818181818182,
+                "automated": 11
+              }
+            },
+            {
+              "key": "cosine",
+              "label": "Cosine similarity alone",
+              "aurc": 0.132,
+              "points": [
+                {
+                  "c": 0.1,
+                  "r": 0
+                },
+                {
+                  "c": 0.125,
+                  "r": 0
+                },
+                {
+                  "c": 0.15,
+                  "r": 0
+                },
+                {
+                  "c": 0.175,
+                  "r": 0
+                },
+                {
+                  "c": 0.2,
+                  "r": 0.125
+                },
+                {
+                  "c": 0.225,
+                  "r": 0.222
+                },
+                {
+                  "c": 0.25,
+                  "r": 0.3
+                },
+                {
+                  "c": 0.275,
+                  "r": 0.273
+                },
+                {
+                  "c": 0.3,
+                  "r": 0.333
+                },
+                {
+                  "c": 0.325,
+                  "r": 0.308
+                },
+                {
+                  "c": 0.35,
+                  "r": 0.286
+                }
+              ],
+              "at08": null
+            },
+            {
+              "key": "certainty",
+              "label": "Self-certainty alone",
+              "aurc": 0.069,
+              "points": [
+                {
+                  "c": 0.15,
+                  "r": 0
+                },
+                {
+                  "c": 0.2,
+                  "r": 0
+                },
+                {
+                  "c": 0.225,
+                  "r": 0
+                },
+                {
+                  "c": 0.25,
+                  "r": 0.1
+                },
+                {
+                  "c": 0.275,
+                  "r": 0.182
+                },
+                {
+                  "c": 0.3,
+                  "r": 0.167
+                },
+                {
+                  "c": 0.325,
+                  "r": 0.231
+                },
+                {
+                  "c": 0.35,
+                  "r": 0.286
+                }
+              ],
+              "at08": null
+            },
+            {
+              "key": "model_retrieval",
+              "label": "Model-reported retrieval alone",
+              "aurc": 0.062,
+              "points": [
+                {
+                  "c": 0.075,
+                  "r": 0
+                },
+                {
+                  "c": 0.15,
+                  "r": 0
+                },
+                {
+                  "c": 0.2,
+                  "r": 0
+                },
+                {
+                  "c": 0.225,
+                  "r": 0
+                },
+                {
+                  "c": 0.25,
+                  "r": 0.1
+                },
+                {
+                  "c": 0.275,
+                  "r": 0.091
+                },
+                {
+                  "c": 0.3,
+                  "r": 0.167
+                },
+                {
+                  "c": 0.325,
+                  "r": 0.231
+                },
+                {
+                  "c": 0.35,
+                  "r": 0.286
+                }
+              ],
+              "at08": null
+            }
+          ]
+        },
+        "cost": {
+          "total": 0.365,
+          "perTicket": 0.009113566824999999
+        },
+        "latencyS": 22.398
+      }
+    },
+    "openai/gpt-oss-120b:exacto": {
+      "core": {
+        "runs": 76,
+        "completion": {
+          "mean": 0.961,
+          "min": 0.95,
+          "max": 0.972
+        },
+        "categoryAccuracy": 0.808,
+        "macroF1": 0.82,
+        "perClass": {
+          "technical_api_error": {
+            "precision": 0.667,
+            "recall": 0.824,
+            "support": 17
+          },
+          "feature_question": {
+            "precision": 0.706,
+            "recall": 0.8,
+            "support": 15
+          },
+          "account_access": {
+            "precision": 0,
+            "recall": 0,
+            "support": 0
+          },
+          "billing": {
+            "precision": 0.857,
+            "recall": 1,
+            "support": 12
+          },
+          "security_abuse": {
+            "precision": 1,
+            "recall": 1,
+            "support": 10
+          },
+          "sales_enterprise": {
+            "precision": 1,
+            "recall": 0.857,
+            "support": 7
+          },
+          "bug_report": {
+            "precision": 1,
+            "recall": 0.417,
+            "support": 12
+          }
+        },
+        "categoryConfusion": {
+          "labels": [
+            "technical_api_error",
+            "feature_question",
+            "account_access",
+            "billing",
+            "security_abuse",
+            "sales_enterprise",
+            "bug_report"
+          ],
+          "matrix": [
+            [
+              14,
+              3,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              12,
+              0,
+              2,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              12,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              10,
+              0,
+              0
+            ],
+            [
+              0,
+              1,
+              0,
+              0,
+              0,
+              6,
+              0
+            ],
+            [
+              6,
+              1,
+              0,
+              0,
+              0,
+              0,
+              5
+            ]
+          ]
+        },
+        "variants": [
+          {
+            "key": "before",
+            "label": "Original routing (model-reported retrieval)",
+            "escalationRecall": {
+              "mean": 0.798,
+              "min": 0.762,
+              "max": 0.833
+            },
+            "escalationRecallCI": [
+              0.662,
+              0.891
+            ],
+            "unsafeAutoResolves": {
+              "mean": 4.5,
+              "min": 4,
+              "max": 5
+            },
+            "autoResolvePrecision": {
+              "mean": 0.736,
+              "min": 0.722,
+              "max": 0.75
+            },
+            "autoResolveRecall": {
+              "mean": 0.808,
+              "min": 0.75,
+              "max": 0.867
+            },
+            "coverage": {
+              "mean": 0.45,
+              "min": 0.4,
+              "max": 0.5
+            },
+            "sensitiveRecall": {
+              "mean": 0.855,
+              "min": 0.8,
+              "max": 0.909
+            },
+            "netCatches": {
+              "mean": 0,
+              "min": 0,
+              "max": 0
+            },
+            "pooled": {
+              "tp": 36,
+              "fp": 6,
+              "fn": 9,
+              "tn": 25
+            }
+          },
+          {
+            "key": "net_only",
+            "label": "Original + safety net — shipped",
+            "escalationRecall": {
+              "mean": 0.798,
+              "min": 0.762,
+              "max": 0.833
+            },
+            "escalationRecallCI": [
+              0.662,
+              0.891
+            ],
+            "unsafeAutoResolves": {
+              "mean": 4.5,
+              "min": 4,
+              "max": 5
+            },
+            "autoResolvePrecision": {
+              "mean": 0.736,
+              "min": 0.722,
+              "max": 0.75
+            },
+            "autoResolveRecall": {
+              "mean": 0.808,
+              "min": 0.75,
+              "max": 0.867
+            },
+            "coverage": {
+              "mean": 0.45,
+              "min": 0.4,
+              "max": 0.5
+            },
+            "sensitiveRecall": {
+              "mean": 0.855,
+              "min": 0.8,
+              "max": 0.909
+            },
+            "netCatches": {
+              "mean": 0.5,
+              "min": 0,
+              "max": 1
+            },
+            "pooled": {
+              "tp": 36,
+              "fp": 6,
+              "fn": 9,
+              "tn": 25
+            }
+          },
+          {
+            "key": "cosine_only",
+            "label": "Cosine retrieval instead — rejected",
+            "escalationRecall": {
+              "mean": 0.866,
+              "min": 0.857,
+              "max": 0.875
+            },
+            "escalationRecallCI": [
+              0.738,
+              0.937
+            ],
+            "unsafeAutoResolves": {
+              "mean": 3,
+              "min": 3,
+              "max": 3
+            },
+            "autoResolvePrecision": {
+              "mean": 0.708,
+              "min": 0.667,
+              "max": 0.75
+            },
+            "autoResolveRecall": {
+              "mean": 0.481,
+              "min": 0.4,
+              "max": 0.563
+            },
+            "coverage": {
+              "mean": 0.275,
+              "min": 0.25,
+              "max": 0.3
+            },
+            "sensitiveRecall": {
+              "mean": 0.905,
+              "min": 0.9,
+              "max": 0.909
+            },
+            "netCatches": {
+              "mean": 0,
+              "min": 0,
+              "max": 0
+            },
+            "pooled": {
+              "tp": 39,
+              "fp": 16,
+              "fn": 6,
+              "tn": 15
+            }
+          },
+          {
+            "key": "after",
+            "label": "Cosine retrieval + safety net — rejected",
+            "escalationRecall": {
+              "mean": 0.866,
+              "min": 0.857,
+              "max": 0.875
+            },
+            "escalationRecallCI": [
+              0.738,
+              0.937
+            ],
+            "unsafeAutoResolves": {
+              "mean": 3,
+              "min": 3,
+              "max": 3
+            },
+            "autoResolvePrecision": {
+              "mean": 0.708,
+              "min": 0.667,
+              "max": 0.75
+            },
+            "autoResolveRecall": {
+              "mean": 0.481,
+              "min": 0.4,
+              "max": 0.563
+            },
+            "coverage": {
+              "mean": 0.275,
+              "min": 0.25,
+              "max": 0.3
+            },
+            "sensitiveRecall": {
+              "mean": 0.905,
+              "min": 0.9,
+              "max": 0.909
+            },
+            "netCatches": {
+              "mean": 0.5,
+              "min": 0,
+              "max": 1
+            },
+            "pooled": {
+              "tp": 39,
+              "fp": 16,
+              "fn": 6,
+              "tn": 15
+            }
+          }
+        ],
+        "riskCoverage": {
+          "candidates": 37,
+          "total": 76,
+          "baseRisk": 0.27,
+          "optimalAurc": 0.044,
+          "signals": [
+            {
+              "key": "blend_cosine",
+              "label": "0.6·cosine + 0.4·certainty (rejected)",
+              "aurc": 0.227,
+              "points": [
+                {
+                  "c": 0.013,
+                  "r": 0
+                },
+                {
+                  "c": 0.026,
+                  "r": 0
+                },
+                {
+                  "c": 0.066,
+                  "r": 0.2
+                },
+                {
+                  "c": 0.079,
+                  "r": 0.167
+                },
+                {
+                  "c": 0.092,
+                  "r": 0.143
+                },
+                {
+                  "c": 0.105,
+                  "r": 0.125
+                },
+                {
+                  "c": 0.118,
+                  "r": 0.111
+                },
+                {
+                  "c": 0.132,
+                  "r": 0.1
+                },
+                {
+                  "c": 0.145,
+                  "r": 0.091
+                },
+                {
+                  "c": 0.158,
+                  "r": 0.167
+                },
+                {
+                  "c": 0.171,
+                  "r": 0.231
+                },
+                {
+                  "c": 0.184,
+                  "r": 0.214
+                },
+                {
+                  "c": 0.197,
+                  "r": 0.267
+                },
+                {
+                  "c": 0.211,
+                  "r": 0.313
+                },
+                {
+                  "c": 0.224,
+                  "r": 0.294
+                },
+                {
+                  "c": 0.237,
+                  "r": 0.278
+                },
+                {
+                  "c": 0.25,
+                  "r": 0.263
+                },
+                {
+                  "c": 0.263,
+                  "r": 0.3
+                },
+                {
+                  "c": 0.276,
+                  "r": 0.286
+                },
+                {
+                  "c": 0.289,
+                  "r": 0.273
+                },
+                {
+                  "c": 0.303,
+                  "r": 0.261
+                },
+                {
+                  "c": 0.316,
+                  "r": 0.25
+                },
+                {
+                  "c": 0.329,
+                  "r": 0.28
+                },
+                {
+                  "c": 0.342,
+                  "r": 0.269
+                },
+                {
+                  "c": 0.355,
+                  "r": 0.259
+                },
+                {
+                  "c": 0.368,
+                  "r": 0.25
+                },
+                {
+                  "c": 0.382,
+                  "r": 0.241
+                },
+                {
+                  "c": 0.395,
+                  "r": 0.267
+                },
+                {
+                  "c": 0.408,
+                  "r": 0.258
+                },
+                {
+                  "c": 0.421,
+                  "r": 0.281
+                },
+                {
+                  "c": 0.434,
+                  "r": 0.273
+                },
+                {
+                  "c": 0.447,
+                  "r": 0.265
+                },
+                {
+                  "c": 0.461,
+                  "r": 0.286
+                },
+                {
+                  "c": 0.474,
+                  "r": 0.278
+                },
+                {
+                  "c": 0.487,
+                  "r": 0.27
+                }
+              ],
+              "at08": {
+                "coverage": 0.27631578947368424,
+                "risk": 0.2857142857142857,
+                "automated": 21
+              }
+            },
+            {
+              "key": "blend_model",
+              "label": "0.6·model-reported + 0.4·certainty (shipped)",
+              "aurc": 0.183,
+              "points": [
+                {
+                  "c": 0.013,
+                  "r": 0
+                },
+                {
+                  "c": 0.026,
+                  "r": 0
+                },
+                {
+                  "c": 0.039,
+                  "r": 0.333
+                },
+                {
+                  "c": 0.066,
+                  "r": 0.2
+                },
+                {
+                  "c": 0.092,
+                  "r": 0.143
+                },
+                {
+                  "c": 0.132,
+                  "r": 0.1
+                },
+                {
+                  "c": 0.158,
+                  "r": 0.083
+                },
+                {
+                  "c": 0.171,
+                  "r": 0.077
+                },
+                {
+                  "c": 0.184,
+                  "r": 0.071
+                },
+                {
+                  "c": 0.197,
+                  "r": 0.133
+                },
+                {
+                  "c": 0.211,
+                  "r": 0.125
+                },
+                {
+                  "c": 0.224,
+                  "r": 0.176
+                },
+                {
+                  "c": 0.237,
+                  "r": 0.167
+                },
+                {
+                  "c": 0.25,
+                  "r": 0.158
+                },
+                {
+                  "c": 0.263,
+                  "r": 0.15
+                },
+                {
+                  "c": 0.289,
+                  "r": 0.182
+                },
+                {
+                  "c": 0.303,
+                  "r": 0.174
+                },
+                {
+                  "c": 0.355,
+                  "r": 0.222
+                },
+                {
+                  "c": 0.368,
+                  "r": 0.25
+                },
+                {
+                  "c": 0.382,
+                  "r": 0.241
+                },
+                {
+                  "c": 0.395,
+                  "r": 0.267
+                },
+                {
+                  "c": 0.408,
+                  "r": 0.29
+                },
+                {
+                  "c": 0.434,
+                  "r": 0.273
+                },
+                {
+                  "c": 0.447,
+                  "r": 0.265
+                },
+                {
+                  "c": 0.461,
+                  "r": 0.257
+                },
+                {
+                  "c": 0.474,
+                  "r": 0.25
+                },
+                {
+                  "c": 0.487,
+                  "r": 0.27
+                }
+              ],
+              "at08": {
+                "coverage": 0.4473684210526316,
+                "risk": 0.2647058823529412,
+                "automated": 34
+              }
+            },
+            {
+              "key": "cosine",
+              "label": "Cosine similarity alone",
+              "aurc": 0.272,
+              "points": [
+                {
+                  "c": 0.118,
+                  "r": 0.111
+                },
+                {
+                  "c": 0.132,
+                  "r": 0.1
+                },
+                {
+                  "c": 0.145,
+                  "r": 0.091
+                },
+                {
+                  "c": 0.158,
+                  "r": 0.083
+                },
+                {
+                  "c": 0.171,
+                  "r": 0.154
+                },
+                {
+                  "c": 0.184,
+                  "r": 0.214
+                },
+                {
+                  "c": 0.197,
+                  "r": 0.2
+                },
+                {
+                  "c": 0.211,
+                  "r": 0.25
+                },
+                {
+                  "c": 0.224,
+                  "r": 0.294
+                },
+                {
+                  "c": 0.237,
+                  "r": 0.278
+                },
+                {
+                  "c": 0.25,
+                  "r": 0.316
+                },
+                {
+                  "c": 0.263,
+                  "r": 0.3
+                },
+                {
+                  "c": 0.276,
+                  "r": 0.333
+                },
+                {
+                  "c": 0.289,
+                  "r": 0.318
+                },
+                {
+                  "c": 0.303,
+                  "r": 0.304
+                },
+                {
+                  "c": 0.316,
+                  "r": 0.333
+                },
+                {
+                  "c": 0.329,
+                  "r": 0.32
+                },
+                {
+                  "c": 0.342,
+                  "r": 0.308
+                },
+                {
+                  "c": 0.355,
+                  "r": 0.296
+                },
+                {
+                  "c": 0.368,
+                  "r": 0.286
+                },
+                {
+                  "c": 0.382,
+                  "r": 0.276
+                },
+                {
+                  "c": 0.395,
+                  "r": 0.267
+                },
+                {
+                  "c": 0.408,
+                  "r": 0.258
+                },
+                {
+                  "c": 0.421,
+                  "r": 0.281
+                },
+                {
+                  "c": 0.434,
+                  "r": 0.273
+                },
+                {
+                  "c": 0.447,
+                  "r": 0.265
+                },
+                {
+                  "c": 0.461,
+                  "r": 0.286
+                },
+                {
+                  "c": 0.487,
+                  "r": 0.27
+                }
+              ],
+              "at08": null
+            },
+            {
+              "key": "certainty",
+              "label": "Self-certainty alone",
+              "aurc": 0.248,
+              "points": [
+                {
+                  "c": 0.026,
+                  "r": 0
+                },
+                {
+                  "c": 0.079,
+                  "r": 0.167
+                },
+                {
+                  "c": 0.158,
+                  "r": 0.25
+                },
+                {
+                  "c": 0.224,
+                  "r": 0.176
+                },
+                {
+                  "c": 0.342,
+                  "r": 0.269
+                },
+                {
+                  "c": 0.368,
+                  "r": 0.25
+                },
+                {
+                  "c": 0.382,
+                  "r": 0.241
+                },
+                {
+                  "c": 0.395,
+                  "r": 0.267
+                },
+                {
+                  "c": 0.421,
+                  "r": 0.25
+                },
+                {
+                  "c": 0.434,
+                  "r": 0.242
+                },
+                {
+                  "c": 0.447,
+                  "r": 0.265
+                },
+                {
+                  "c": 0.461,
+                  "r": 0.257
+                },
+                {
+                  "c": 0.474,
+                  "r": 0.25
+                },
+                {
+                  "c": 0.487,
+                  "r": 0.27
+                }
+              ],
+              "at08": null
+            },
+            {
+              "key": "model_retrieval",
+              "label": "Model-reported retrieval alone",
+              "aurc": 0.209,
+              "points": [
+                {
+                  "c": 0.013,
+                  "r": 0
+                },
+                {
+                  "c": 0.105,
+                  "r": 0.125
+                },
+                {
+                  "c": 0.118,
+                  "r": 0.111
+                },
+                {
+                  "c": 0.171,
+                  "r": 0.077
+                },
+                {
+                  "c": 0.224,
+                  "r": 0.118
+                },
+                {
+                  "c": 0.237,
+                  "r": 0.167
+                },
+                {
+                  "c": 0.276,
+                  "r": 0.19
+                },
+                {
+                  "c": 0.368,
+                  "r": 0.25
+                },
+                {
+                  "c": 0.382,
+                  "r": 0.276
+                },
+                {
+                  "c": 0.395,
+                  "r": 0.267
+                },
+                {
+                  "c": 0.474,
+                  "r": 0.25
+                },
+                {
+                  "c": 0.487,
+                  "r": 0.27
+                }
+              ],
+              "at08": null
+            }
+          ]
+        },
+        "cost": {
+          "total": 0.096,
+          "perTicket": 0.001264329868421053
+        },
+        "latencyS": 40.754
+      }
+    },
+    "qwen/qwen3.7-flash": {
+      "core": {
+        "runs": 120,
+        "completion": {
+          "mean": 0.942,
+          "min": 0.85,
+          "max": 1
+        },
+        "categoryAccuracy": 0.752,
+        "macroF1": 0.78,
+        "perClass": {
+          "technical_api_error": {
+            "precision": 0.488,
+            "recall": 0.833,
+            "support": 24
+          },
+          "feature_question": {
+            "precision": 0.708,
+            "recall": 0.708,
+            "support": 24
+          },
+          "account_access": {
+            "precision": 0,
+            "recall": 0,
+            "support": 0
+          },
+          "billing": {
+            "precision": 1,
+            "recall": 0.941,
+            "support": 17
+          },
+          "security_abuse": {
+            "precision": 1,
+            "recall": 1,
+            "support": 15
+          },
+          "sales_enterprise": {
+            "precision": 1,
+            "recall": 1,
+            "support": 12
+          },
+          "bug_report": {
+            "precision": 1,
+            "recall": 0.238,
+            "support": 21
+          }
+        },
+        "categoryConfusion": {
+          "labels": [
+            "technical_api_error",
+            "feature_question",
+            "account_access",
+            "billing",
+            "security_abuse",
+            "sales_enterprise",
+            "bug_report"
+          ],
+          "matrix": [
+            [
+              20,
+              4,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              7,
+              17,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              1,
+              0,
+              0,
+              16,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              15,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              12,
+              0
+            ],
+            [
+              13,
+              3,
+              0,
+              0,
+              0,
+              0,
+              5
+            ]
+          ]
+        },
+        "variants": [
+          {
+            "key": "before",
+            "label": "Original routing (model-reported retrieval)",
+            "escalationRecall": {
+              "mean": 0.931,
+              "min": 0.875,
+              "max": 0.958
+            },
+            "escalationRecallCI": [
+              0.848,
+              0.97
+            ],
+            "unsafeAutoResolves": {
+              "mean": 1.667,
+              "min": 1,
+              "max": 3
+            },
+            "autoResolvePrecision": {
+              "mean": 0.847,
+              "min": 0.75,
+              "max": 0.917
+            },
+            "autoResolveRecall": {
+              "mean": 0.563,
+              "min": 0.438,
+              "max": 0.688
+            },
+            "coverage": {
+              "mean": 0.267,
+              "min": 0.2,
+              "max": 0.3
+            },
+            "sensitiveRecall": {
+              "mean": 0.939,
+              "min": 0.909,
+              "max": 0.955
+            },
+            "netCatches": {
+              "mean": 0,
+              "min": 0,
+              "max": 0
+            },
+            "pooled": {
+              "tp": 67,
+              "fp": 21,
+              "fn": 5,
+              "tn": 27
+            }
+          },
+          {
+            "key": "net_only",
+            "label": "Original + safety net — shipped",
+            "escalationRecall": {
+              "mean": 0.931,
+              "min": 0.875,
+              "max": 0.958
+            },
+            "escalationRecallCI": [
+              0.848,
+              0.97
+            ],
+            "unsafeAutoResolves": {
+              "mean": 1.667,
+              "min": 1,
+              "max": 3
+            },
+            "autoResolvePrecision": {
+              "mean": 0.847,
+              "min": 0.75,
+              "max": 0.917
+            },
+            "autoResolveRecall": {
+              "mean": 0.563,
+              "min": 0.438,
+              "max": 0.688
+            },
+            "coverage": {
+              "mean": 0.267,
+              "min": 0.2,
+              "max": 0.3
+            },
+            "sensitiveRecall": {
+              "mean": 0.939,
+              "min": 0.909,
+              "max": 0.955
+            },
+            "netCatches": {
+              "mean": 0,
+              "min": 0,
+              "max": 0
+            },
+            "pooled": {
+              "tp": 67,
+              "fp": 21,
+              "fn": 5,
+              "tn": 27
+            }
+          },
+          {
+            "key": "cosine_only",
+            "label": "Cosine retrieval instead — rejected",
+            "escalationRecall": {
+              "mean": 0.861,
+              "min": 0.75,
+              "max": 0.958
+            },
+            "escalationRecallCI": [
+              0.763,
+              0.923
+            ],
+            "unsafeAutoResolves": {
+              "mean": 3.333,
+              "min": 1,
+              "max": 6
+            },
+            "autoResolvePrecision": {
+              "mean": 0.717,
+              "min": 0.5,
+              "max": 0.9
+            },
+            "autoResolveRecall": {
+              "mean": 0.5,
+              "min": 0.375,
+              "max": 0.563
+            },
+            "coverage": {
+              "mean": 0.283,
+              "min": 0.25,
+              "max": 0.3
+            },
+            "sensitiveRecall": {
+              "mean": 0.894,
+              "min": 0.773,
+              "max": 1
+            },
+            "netCatches": {
+              "mean": 0,
+              "min": 0,
+              "max": 0
+            },
+            "pooled": {
+              "tp": 62,
+              "fp": 24,
+              "fn": 10,
+              "tn": 24
+            }
+          },
+          {
+            "key": "after",
+            "label": "Cosine retrieval + safety net — rejected",
+            "escalationRecall": {
+              "mean": 0.861,
+              "min": 0.75,
+              "max": 0.958
+            },
+            "escalationRecallCI": [
+              0.763,
+              0.923
+            ],
+            "unsafeAutoResolves": {
+              "mean": 3.333,
+              "min": 1,
+              "max": 6
+            },
+            "autoResolvePrecision": {
+              "mean": 0.717,
+              "min": 0.5,
+              "max": 0.9
+            },
+            "autoResolveRecall": {
+              "mean": 0.5,
+              "min": 0.375,
+              "max": 0.563
+            },
+            "coverage": {
+              "mean": 0.283,
+              "min": 0.25,
+              "max": 0.3
+            },
+            "sensitiveRecall": {
+              "mean": 0.894,
+              "min": 0.773,
+              "max": 1
+            },
+            "netCatches": {
+              "mean": 0,
+              "min": 0,
+              "max": 0
+            },
+            "pooled": {
+              "tp": 62,
+              "fp": 24,
+              "fn": 10,
+              "tn": 24
+            }
+          }
+        ],
+        "riskCoverage": {
+          "candidates": 65,
+          "total": 120,
+          "baseRisk": 0.354,
+          "optimalAurc": 0.074,
+          "signals": [
+            {
+              "key": "blend_cosine",
+              "label": "0.6·cosine + 0.4·certainty (rejected)",
+              "aurc": 0.277,
+              "points": [
+                {
+                  "c": 0.008,
+                  "r": 0
+                },
+                {
+                  "c": 0.017,
+                  "r": 0
+                },
+                {
+                  "c": 0.025,
+                  "r": 0
+                },
+                {
+                  "c": 0.033,
+                  "r": 0
+                },
+                {
+                  "c": 0.05,
+                  "r": 0
+                },
+                {
+                  "c": 0.058,
+                  "r": 0
+                },
+                {
+                  "c": 0.067,
+                  "r": 0.125
+                },
+                {
+                  "c": 0.075,
+                  "r": 0.222
+                },
+                {
+                  "c": 0.083,
+                  "r": 0.2
+                },
+                {
+                  "c": 0.092,
+                  "r": 0.182
+                },
+                {
+                  "c": 0.125,
+                  "r": 0.2
+                },
+                {
+                  "c": 0.133,
+                  "r": 0.188
+                },
+                {
+                  "c": 0.142,
+                  "r": 0.235
+                },
+                {
+                  "c": 0.15,
+                  "r": 0.278
+                },
+                {
+                  "c": 0.158,
+                  "r": 0.316
+                },
+                {
+                  "c": 0.167,
+                  "r": 0.3
+                },
+                {
+                  "c": 0.175,
+                  "r": 0.286
+                },
+                {
+                  "c": 0.183,
+                  "r": 0.273
+                },
+                {
+                  "c": 0.192,
+                  "r": 0.304
+                },
+                {
+                  "c": 0.2,
+                  "r": 0.333
+                },
+                {
+                  "c": 0.208,
+                  "r": 0.36
+                },
+                {
+                  "c": 0.217,
+                  "r": 0.385
+                },
+                {
+                  "c": 0.225,
+                  "r": 0.37
+                },
+                {
+                  "c": 0.233,
+                  "r": 0.357
+                },
+                {
+                  "c": 0.242,
+                  "r": 0.345
+                },
+                {
+                  "c": 0.25,
+                  "r": 0.333
+                },
+                {
+                  "c": 0.258,
+                  "r": 0.323
+                },
+                {
+                  "c": 0.267,
+                  "r": 0.313
+                },
+                {
+                  "c": 0.275,
+                  "r": 0.303
+                },
+                {
+                  "c": 0.283,
+                  "r": 0.294
+                },
+                {
+                  "c": 0.292,
+                  "r": 0.286
+                },
+                {
+                  "c": 0.3,
+                  "r": 0.306
+                },
+                {
+                  "c": 0.308,
+                  "r": 0.297
+                },
+                {
+                  "c": 0.317,
+                  "r": 0.316
+                },
+                {
+                  "c": 0.325,
+                  "r": 0.333
+                },
+                {
+                  "c": 0.333,
+                  "r": 0.325
+                },
+                {
+                  "c": 0.342,
+                  "r": 0.341
+                },
+                {
+                  "c": 0.35,
+                  "r": 0.333
+                },
+                {
+                  "c": 0.358,
+                  "r": 0.326
+                },
+                {
+                  "c": 0.367,
+                  "r": 0.341
+                },
+                {
+                  "c": 0.375,
+                  "r": 0.333
+                },
+                {
+                  "c": 0.383,
+                  "r": 0.326
+                },
+                {
+                  "c": 0.392,
+                  "r": 0.34
+                },
+                {
+                  "c": 0.4,
+                  "r": 0.333
+                },
+                {
+                  "c": 0.408,
+                  "r": 0.347
+                },
+                {
+                  "c": 0.417,
+                  "r": 0.36
+                },
+                {
+                  "c": 0.425,
+                  "r": 0.353
+                },
+                {
+                  "c": 0.433,
+                  "r": 0.346
+                },
+                {
+                  "c": 0.442,
+                  "r": 0.34
+                },
+                {
+                  "c": 0.45,
+                  "r": 0.333
+                },
+                {
+                  "c": 0.458,
+                  "r": 0.345
+                },
+                {
+                  "c": 0.467,
+                  "r": 0.357
+                },
+                {
+                  "c": 0.475,
+                  "r": 0.351
+                },
+                {
+                  "c": 0.483,
+                  "r": 0.362
+                },
+                {
+                  "c": 0.492,
+                  "r": 0.356
+                },
+                {
+                  "c": 0.5,
+                  "r": 0.35
+                },
+                {
+                  "c": 0.508,
+                  "r": 0.361
+                },
+                {
+                  "c": 0.525,
+                  "r": 0.349
+                },
+                {
+                  "c": 0.533,
+                  "r": 0.344
+                },
+                {
+                  "c": 0.542,
+                  "r": 0.354
+                }
+              ],
+              "at08": {
+                "coverage": 0.2833333333333333,
+                "risk": 0.29411764705882354,
+                "automated": 34
+              }
+            },
+            {
+              "key": "blend_model",
+              "label": "0.6·model-reported + 0.4·certainty (shipped)",
+              "aurc": 0.187,
+              "points": [
+                {
+                  "c": 0.033,
+                  "r": 0
+                },
+                {
+                  "c": 0.042,
+                  "r": 0
+                },
+                {
+                  "c": 0.05,
+                  "r": 0
+                },
+                {
+                  "c": 0.083,
+                  "r": 0
+                },
+                {
+                  "c": 0.1,
+                  "r": 0
+                },
+                {
+                  "c": 0.108,
+                  "r": 0
+                },
+                {
+                  "c": 0.125,
+                  "r": 0
+                },
+                {
+                  "c": 0.158,
+                  "r": 0.105
+                },
+                {
+                  "c": 0.175,
+                  "r": 0.095
+                },
+                {
+                  "c": 0.183,
+                  "r": 0.091
+                },
+                {
+                  "c": 0.217,
+                  "r": 0.077
+                },
+                {
+                  "c": 0.267,
+                  "r": 0.156
+                },
+                {
+                  "c": 0.275,
+                  "r": 0.182
+                },
+                {
+                  "c": 0.283,
+                  "r": 0.206
+                },
+                {
+                  "c": 0.3,
+                  "r": 0.222
+                },
+                {
+                  "c": 0.325,
+                  "r": 0.231
+                },
+                {
+                  "c": 0.333,
+                  "r": 0.25
+                },
+                {
+                  "c": 0.358,
+                  "r": 0.279
+                },
+                {
+                  "c": 0.408,
+                  "r": 0.327
+                },
+                {
+                  "c": 0.417,
+                  "r": 0.34
+                },
+                {
+                  "c": 0.425,
+                  "r": 0.353
+                },
+                {
+                  "c": 0.433,
+                  "r": 0.346
+                },
+                {
+                  "c": 0.442,
+                  "r": 0.358
+                },
+                {
+                  "c": 0.458,
+                  "r": 0.345
+                },
+                {
+                  "c": 0.467,
+                  "r": 0.339
+                },
+                {
+                  "c": 0.475,
+                  "r": 0.351
+                },
+                {
+                  "c": 0.492,
+                  "r": 0.356
+                },
+                {
+                  "c": 0.5,
+                  "r": 0.35
+                },
+                {
+                  "c": 0.508,
+                  "r": 0.361
+                },
+                {
+                  "c": 0.517,
+                  "r": 0.371
+                },
+                {
+                  "c": 0.525,
+                  "r": 0.365
+                },
+                {
+                  "c": 0.533,
+                  "r": 0.359
+                },
+                {
+                  "c": 0.542,
+                  "r": 0.354
+                }
+              ],
+              "at08": {
+                "coverage": 0.26666666666666666,
+                "risk": 0.15625,
+                "automated": 32
+              }
+            },
+            {
+              "key": "cosine",
+              "label": "Cosine similarity alone",
+              "aurc": 0.393,
+              "points": [
+                {
+                  "c": 0.1,
+                  "r": 0.25
+                },
+                {
+                  "c": 0.108,
+                  "r": 0.231
+                },
+                {
+                  "c": 0.117,
+                  "r": 0.286
+                },
+                {
+                  "c": 0.125,
+                  "r": 0.267
+                },
+                {
+                  "c": 0.133,
+                  "r": 0.25
+                },
+                {
+                  "c": 0.142,
+                  "r": 0.294
+                },
+                {
+                  "c": 0.15,
+                  "r": 0.333
+                },
+                {
+                  "c": 0.158,
+                  "r": 0.368
+                },
+                {
+                  "c": 0.167,
+                  "r": 0.35
+                },
+                {
+                  "c": 0.175,
+                  "r": 0.381
+                },
+                {
+                  "c": 0.183,
+                  "r": 0.409
+                },
+                {
+                  "c": 0.192,
+                  "r": 0.391
+                },
+                {
+                  "c": 0.2,
+                  "r": 0.375
+                },
+                {
+                  "c": 0.208,
+                  "r": 0.36
+                },
+                {
+                  "c": 0.217,
+                  "r": 0.346
+                },
+                {
+                  "c": 0.225,
+                  "r": 0.333
+                },
+                {
+                  "c": 0.233,
+                  "r": 0.321
+                },
+                {
+                  "c": 0.242,
+                  "r": 0.345
+                },
+                {
+                  "c": 0.25,
+                  "r": 0.333
+                },
+                {
+                  "c": 0.258,
+                  "r": 0.323
+                },
+                {
+                  "c": 0.267,
+                  "r": 0.344
+                },
+                {
+                  "c": 0.275,
+                  "r": 0.333
+                },
+                {
+                  "c": 0.283,
+                  "r": 0.324
+                },
+                {
+                  "c": 0.292,
+                  "r": 0.343
+                },
+                {
+                  "c": 0.3,
+                  "r": 0.361
+                },
+                {
+                  "c": 0.308,
+                  "r": 0.378
+                },
+                {
+                  "c": 0.317,
+                  "r": 0.368
+                },
+                {
+                  "c": 0.325,
+                  "r": 0.385
+                },
+                {
+                  "c": 0.333,
+                  "r": 0.375
+                },
+                {
+                  "c": 0.342,
+                  "r": 0.366
+                },
+                {
+                  "c": 0.35,
+                  "r": 0.357
+                },
+                {
+                  "c": 0.358,
+                  "r": 0.372
+                },
+                {
+                  "c": 0.367,
+                  "r": 0.386
+                },
+                {
+                  "c": 0.375,
+                  "r": 0.378
+                },
+                {
+                  "c": 0.383,
+                  "r": 0.391
+                },
+                {
+                  "c": 0.392,
+                  "r": 0.383
+                },
+                {
+                  "c": 0.4,
+                  "r": 0.375
+                },
+                {
+                  "c": 0.408,
+                  "r": 0.367
+                },
+                {
+                  "c": 0.417,
+                  "r": 0.36
+                },
+                {
+                  "c": 0.425,
+                  "r": 0.373
+                },
+                {
+                  "c": 0.433,
+                  "r": 0.365
+                },
+                {
+                  "c": 0.442,
+                  "r": 0.377
+                },
+                {
+                  "c": 0.45,
+                  "r": 0.389
+                },
+                {
+                  "c": 0.458,
+                  "r": 0.382
+                },
+                {
+                  "c": 0.467,
+                  "r": 0.375
+                },
+                {
+                  "c": 0.475,
+                  "r": 0.368
+                },
+                {
+                  "c": 0.483,
+                  "r": 0.362
+                },
+                {
+                  "c": 0.492,
+                  "r": 0.356
+                },
+                {
+                  "c": 0.5,
+                  "r": 0.35
+                },
+                {
+                  "c": 0.508,
+                  "r": 0.361
+                },
+                {
+                  "c": 0.517,
+                  "r": 0.371
+                },
+                {
+                  "c": 0.525,
+                  "r": 0.365
+                },
+                {
+                  "c": 0.542,
+                  "r": 0.354
+                }
+              ],
+              "at08": null
+            },
+            {
+              "key": "certainty",
+              "label": "Self-certainty alone",
+              "aurc": 0.193,
+              "points": [
+                {
+                  "c": 0.083,
+                  "r": 0
+                },
+                {
+                  "c": 0.15,
+                  "r": 0.111
+                },
+                {
+                  "c": 0.2,
+                  "r": 0.083
+                },
+                {
+                  "c": 0.208,
+                  "r": 0.12
+                },
+                {
+                  "c": 0.267,
+                  "r": 0.125
+                },
+                {
+                  "c": 0.358,
+                  "r": 0.256
+                },
+                {
+                  "c": 0.475,
+                  "r": 0.316
+                },
+                {
+                  "c": 0.508,
+                  "r": 0.328
+                },
+                {
+                  "c": 0.533,
+                  "r": 0.344
+                },
+                {
+                  "c": 0.542,
+                  "r": 0.354
+                }
+              ],
+              "at08": null
+            },
+            {
+              "key": "model_retrieval",
+              "label": "Model-reported retrieval alone",
+              "aurc": 0.22,
+              "points": [
+                {
+                  "c": 0.042,
+                  "r": 0
+                },
+                {
+                  "c": 0.058,
+                  "r": 0
+                },
+                {
+                  "c": 0.125,
+                  "r": 0
+                },
+                {
+                  "c": 0.267,
+                  "r": 0.188
+                },
+                {
+                  "c": 0.283,
+                  "r": 0.206
+                },
+                {
+                  "c": 0.3,
+                  "r": 0.222
+                },
+                {
+                  "c": 0.342,
+                  "r": 0.293
+                },
+                {
+                  "c": 0.425,
+                  "r": 0.353
+                },
+                {
+                  "c": 0.433,
+                  "r": 0.346
+                },
+                {
+                  "c": 0.467,
+                  "r": 0.339
+                },
+                {
+                  "c": 0.483,
+                  "r": 0.345
+                },
+                {
+                  "c": 0.5,
+                  "r": 0.35
+                },
+                {
+                  "c": 0.508,
+                  "r": 0.361
+                },
+                {
+                  "c": 0.517,
+                  "r": 0.371
+                },
+                {
+                  "c": 0.542,
+                  "r": 0.354
+                }
+              ],
+              "at08": null
+            }
+          ]
+        },
+        "cost": {
+          "total": 0.19,
+          "perTicket": 0.0015861375500000007
+        },
+        "latencyS": 52.07
+      },
+      "hard": {
+        "runs": 36,
+        "completion": {
+          "mean": 0.944,
+          "min": 0.917,
+          "max": 1
+        },
+        "categoryAccuracy": 0.706,
+        "macroF1": 0.585,
+        "perClass": {
+          "technical_api_error": {
+            "precision": 0.25,
+            "recall": 0.333,
+            "support": 3
+          },
+          "feature_question": {
+            "precision": 0.682,
+            "recall": 1,
+            "support": 15
+          },
+          "account_access": {
+            "precision": 1,
+            "recall": 1,
+            "support": 3
+          },
+          "billing": {
+            "precision": 1,
+            "recall": 1,
+            "support": 3
+          },
+          "security_abuse": {
+            "precision": 0,
+            "recall": 0,
+            "support": 5
+          },
+          "sales_enterprise": {
+            "precision": 1,
+            "recall": 1,
+            "support": 2
+          },
+          "bug_report": {
+            "precision": 0,
+            "recall": 0,
+            "support": 3
+          }
+        },
+        "categoryConfusion": {
+          "labels": [
+            "technical_api_error",
+            "feature_question",
+            "account_access",
+            "billing",
+            "security_abuse",
+            "sales_enterprise",
+            "bug_report"
+          ],
+          "matrix": [
+            [
+              1,
+              2,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              15,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              3,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              3,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              5,
+              0,
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0,
+              0,
+              2,
+              0
+            ],
+            [
+              3,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0
+            ]
+          ]
+        },
+        "variants": [
+          {
+            "key": "before",
+            "label": "Original routing (model-reported retrieval)",
+            "escalationRecall": {
+              "mean": 0.875,
+              "min": 0.75,
+              "max": 1
+            },
+            "escalationRecallCI": [
+              0.69,
+              0.957
+            ],
+            "unsafeAutoResolves": {
+              "mean": 1,
+              "min": 0,
+              "max": 2
+            },
+            "autoResolvePrecision": {
+              "mean": 0.806,
+              "min": 0.667,
+              "max": 1
+            },
+            "autoResolveRecall": {
+              "mean": 0.75,
+              "min": 0.5,
+              "max": 1
+            },
+            "coverage": {
+              "mean": 0.333,
+              "min": 0.167,
+              "max": 0.5
+            },
+            "sensitiveRecall": {
+              "mean": 0.867,
+              "min": 0.8,
+              "max": 1
+            },
+            "netCatches": {
+              "mean": 0,
+              "min": 0,
+              "max": 0
+            },
+            "pooled": {
+              "tp": 21,
+              "fp": 3,
+              "fn": 3,
+              "tn": 9
+            }
+          },
+          {
+            "key": "net_only",
+            "label": "Original + safety net — shipped",
+            "escalationRecall": {
+              "mean": 0.875,
+              "min": 0.75,
+              "max": 1
+            },
+            "escalationRecallCI": [
+              0.69,
+              0.957
+            ],
+            "unsafeAutoResolves": {
+              "mean": 1,
+              "min": 0,
+              "max": 2
+            },
+            "autoResolvePrecision": {
+              "mean": 0.806,
+              "min": 0.667,
+              "max": 1
+            },
+            "autoResolveRecall": {
+              "mean": 0.75,
+              "min": 0.5,
+              "max": 1
+            },
+            "coverage": {
+              "mean": 0.333,
+              "min": 0.167,
+              "max": 0.5
+            },
+            "sensitiveRecall": {
+              "mean": 0.867,
+              "min": 0.8,
+              "max": 1
+            },
+            "netCatches": {
+              "mean": 0,
+              "min": 0,
+              "max": 0
+            },
+            "pooled": {
+              "tp": 21,
+              "fp": 3,
+              "fn": 3,
+              "tn": 9
+            }
+          },
+          {
+            "key": "cosine_only",
+            "label": "Cosine retrieval instead — rejected",
+            "escalationRecall": {
+              "mean": 0.958,
+              "min": 0.875,
+              "max": 1
+            },
+            "escalationRecallCI": [
+              0.798,
+              0.993
+            ],
+            "unsafeAutoResolves": {
+              "mean": 0.333,
+              "min": 0,
+              "max": 1
+            },
+            "autoResolvePrecision": {
+              "mean": 0.667,
+              "min": 0,
+              "max": 1
+            },
+            "autoResolveRecall": {
+              "mean": 0,
+              "min": 0,
+              "max": 0
+            },
+            "coverage": {
+              "mean": 0.028,
+              "min": 0,
+              "max": 0.083
+            },
+            "sensitiveRecall": {
+              "mean": 1,
+              "min": 1,
+              "max": 1
+            },
+            "netCatches": {
+              "mean": 0,
+              "min": 0,
+              "max": 0
+            },
+            "pooled": {
+              "tp": 23,
+              "fp": 12,
+              "fn": 1,
+              "tn": 0
+            }
+          },
+          {
+            "key": "after",
+            "label": "Cosine retrieval + safety net — rejected",
+            "escalationRecall": {
+              "mean": 0.958,
+              "min": 0.875,
+              "max": 1
+            },
+            "escalationRecallCI": [
+              0.798,
+              0.993
+            ],
+            "unsafeAutoResolves": {
+              "mean": 0.333,
+              "min": 0,
+              "max": 1
+            },
+            "autoResolvePrecision": {
+              "mean": 0.667,
+              "min": 0,
+              "max": 1
+            },
+            "autoResolveRecall": {
+              "mean": 0,
+              "min": 0,
+              "max": 0
+            },
+            "coverage": {
+              "mean": 0.028,
+              "min": 0,
+              "max": 0.083
+            },
+            "sensitiveRecall": {
+              "mean": 1,
+              "min": 1,
+              "max": 1
+            },
+            "netCatches": {
+              "mean": 0,
+              "min": 0,
+              "max": 0
+            },
+            "pooled": {
+              "tp": 23,
+              "fp": 12,
+              "fn": 1,
+              "tn": 0
+            }
+          }
+        ],
+        "cost": {
+          "total": 0.032,
+          "perTicket": 0.0008913090555555556
+        },
+        "latencyS": 33.982
+      }
+    }
+  },
+  "exacto": {
+    "seeds": [
+      1
+    ],
+    "base": {
+      "model": "openai/gpt-oss-120b",
+      "runs": 40,
+      "completed": 31,
+      "counts": {
+        "tp": 22,
+        "fp": 8,
+        "fn": 2,
+        "tn": 8
+      },
+      "cost": 0.009113566824999999,
+      "latencyS": 22.398275,
+      "completion": 0.775,
+      "escalationRecall": 0.917
+    },
+    "exacto": {
+      "model": "openai/gpt-oss-120b:exacto",
+      "runs": 40,
+      "completed": 38,
+      "counts": {
+        "tp": 21,
+        "fp": 7,
+        "fn": 3,
+        "tn": 9
+      },
+      "cost": 0.0012613079999999996,
+      "latencyS": 40.489324999999994,
+      "completion": 0.95,
+      "escalationRecall": 0.875
+    },
+    "completionP": 0.04762516489608773,
+    "escalationRecallP": 1
+  },
+  "findings": {
+    "cosine": {
+      "recallBefore": 0.931,
+      "recallCosine": 0.861,
+      "unsafeBefore": 1.667,
+      "unsafeCosine": 3.333,
+      "aurcModel": 0.187,
+      "aurcCosine": 0.277,
+      "aurcCosineAlone": 0.393,
+      "baseRisk": 0.354
+    },
+    "net": {
+      "tickets": 52,
+      "fires": 15,
+      "sensitive": 19,
+      "caught": 15,
+      "falseHits": 0,
+      "decisionsChanged": 0
+    },
+    "bug": {
+      "total": 21,
+      "labeledBug": 5
+    }
+  }
+}

@@ -4,6 +4,8 @@ import { HeroTriage } from "@/components/landing/HeroTriage";
 import { Walkthrough } from "@/components/landing/Walkthrough";
 import { RoutingLab } from "@/components/landing/RoutingLab";
 import { Results } from "@/components/landing/Results";
+import { Evaluation } from "@/components/landing/Evaluation";
+import evalSummary from "../../evals/results/summary.json";
 import { Reveal } from "@/components/landing/Reveal";
 import {
   ArchitectureDiagram,
@@ -57,9 +59,9 @@ const STATS = [
 const ENGINEERING = [
   {
     key: "Evaluation",
-    title: "A controlled A/B, not a vibe check",
-    body: "The same 40 tickets went through the same prompt, tools and router twice. Only the model changed, so the difference in outcomes is attributable to the model.",
-    where: "OPENROUTER_MODEL",
+    title: "Hand labels, not vibes",
+    body: "Every ticket has a gold category and route. Three seeds per configuration, and four routing variants scored on the same agent runs, so only the routing differs between them.",
+    where: "docs/EVALUATION.md",
   },
   {
     key: "Determinism",
@@ -100,8 +102,8 @@ const ENGINEERING = [
   {
     key: "Known limits",
     title: "What it doesn't do yet",
-    body: "retrieval_score is the model's own read of the chunks, not yet derived from cosine similarity. 2048-d vectors exceed pgvector's index limit, so search is an exact scan. There's no auth in v1.",
-    where: "open items",
+    body: "Retrieval confidence is the model's own score: cosine similarity was tested as a replacement and routed worse. Bug reports are mostly misfiled, so their hard rule rarely fires. Exact vector search needs the 0006 index migration. No auth in v1.",
+    where: "docs/EVALUATION.md",
     limit: true,
   },
 ];
@@ -111,7 +113,7 @@ const STACK = [
   { n: "TypeScript", s: "strict" },
   { n: "Supabase", s: "Postgres · pgvector · RLS" },
   { n: "OpenRouter", s: "OpenAI-compatible tool calling" },
-  { n: "nemotron-3-embed", s: "2048-d embeddings" },
+  { n: "qwen3-embedding-8b", s: "2048-d embeddings" },
   { n: "Vercel", s: "deploy" },
 ];
 
@@ -134,6 +136,9 @@ export default function IntroPage() {
             <a className={styles.navLink} href="#walkthrough">Walkthrough</a>
             <a className={styles.navLink} href="#routing">Routing math</a>
             <a className={styles.navLink} href="#results">Results</a>
+            {evalSummary.status === "complete" && (
+              <a className={styles.navLink} href="#evaluation">Evaluation</a>
+            )}
             <a className={styles.navLink} href="#engineering">Engineering</a>
           </nav>
           <div className={styles.navCtas}>
@@ -389,6 +394,20 @@ export default function IntroPage() {
           <h2 className={styles.h2}>What &ldquo;free&rdquo; actually costs.</h2>
           <Results />
         </section>
+
+        {/* ── Evaluation (only once a labeled run has been scored) ── */}
+        {evalSummary.status === "complete" && (
+          <section className={styles.section} id="evaluation">
+            <span className={styles.eyebrow}>/evaluation</span>
+            <h2 className={styles.h2}>Scored against hand labels, including what didn&apos;t work.</h2>
+            <p className={styles.lede}>
+              Every ticket has a gold label for where it should go. The headline metric is <b>must-escalate recall</b>: of the
+              tickets that need a human, how many reached one. The expensive failure is an agent that confidently answers a billing
+              dispute or a security report, so that&apos;s the number to protect.
+            </p>
+            <Evaluation />
+          </section>
+        )}
 
         {/* ── Architecture ── */}
         <section className={styles.section} id="architecture">

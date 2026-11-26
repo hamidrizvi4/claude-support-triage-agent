@@ -63,6 +63,38 @@ is what the live queue and dashboard demonstrate against; `orchestrator.ts`
 still defaults to the free model and only switches on an explicit env
 override, so the comparison stays reproducible.
 
+## Evaluation
+
+The free-vs-paid run above counts outcomes; it can't say whether a routing
+decision was *right*. So all 40 tickets were hand-labeled with a gold category
+and a gold route (needs a human / docs-answerable) under a written policy
+([`evals/labels.json`](evals/labels.json)), plus 12 hard cases
+([`evals/hard-cases.json`](evals/hard-cases.json)). The agent was then rerun
+3 times per ticket and scored against the labels.
+
+**Headline metric: must-escalate recall.** Of the tickets that need a human,
+the share that reached one. A bot confidently answering a billing dispute or
+a security report is the expensive failure. Four routing variants were scored
+on the same agent runs; the one marked *shipped* is what production runs.
+
+<!-- eval:start -->
+| `qwen/qwen3.7-flash`, 40 labeled tickets × 3 seeds | Must-escalate recall | Unsafe auto-resolves / run | Auto-resolve precision | Coverage |
+|---|---:|---:|---:|---:|
+| Original routing (model-reported retrieval) | 93.1% (87.5%–95.8%) | 1.7 (1–3) | 84.7% (75.0%–91.7%) | 26.7% (20.0%–30.0%) |
+| **Original + safety net — shipped** | 93.1% (87.5%–95.8%) | 1.7 (1–3) | 84.7% (75.0%–91.7%) | 26.7% (20.0%–30.0%) |
+| Cosine retrieval instead — rejected | 86.1% (75.0%–95.8%) | 3.3 (1–6) | 71.7% (50.0%–90.0%) | 28.3% (25.0%–30.0%) |
+| Cosine retrieval + safety net — rejected | 86.1% (75.0%–95.8%) | 3.3 (1–6) | 71.7% (50.0%–90.0%) | 28.3% (25.0%–30.0%) |
+
+*Mean over seeds, min–max in parentheses. Safety net on the ticket text alone: fires on 15/52 tickets, catches 15/19 billing/security/sales tickets, 0 false hits. Full report: [EVALUATION.md](docs/EVALUATION.md).*
+<!-- eval:end -->
+
+<!-- eval-notes:start -->
+- **Cosine similarity is the wrong retrieval signal; rejected.** Swapping the model's self-reported retrieval score for the search's own cosine similarity lowered must-escalate recall from 93.1% to 86.1% and raised unsafe auto-resolves from 1.7 to 3.3 per run. As a ranking signal, cosine alone (AURC 0.393) does worse than no ranking at all (0.354). Similarity measures whether a ticket is on-topic for the docs, not whether the docs can resolve it. Production keeps the model's score.
+- **The safety net works, but this model didn't need it.** On the ticket text alone it fires on 15/52 tickets, catches 15/19 gold billing/security/sales tickets and makes 0 false hits. It changed 0 routing decisions, because the model had already labeled every one of those tickets correctly. Shipped as a free backstop for a model that mislabels; its misses are the deliberately disguised hard cases.
+- **The "bug reports always escalate" rule barely fires.** Only 5 of 21 bug-report runs were labeled `bug_report`; most were filed as `technical_api_error` and reached a human only through low confidence. Category rules are only as good as the classifier.
+- **Exacto routing helps the same model finish.** On `openai/gpt-oss-120b`, completion went from 77.5% to 95.0% (Fisher p = 0.048) at 7.2× lower cost per ticket; the must-escalate recall difference is not significant (p = 1.00).
+<!-- eval-notes:end -->
+
 ## Architecture
 
 ```
@@ -232,8 +264,20 @@ npm run dev                # intro at /, review queue at /queue, dashboard at /d
 ```
 
 ```bash
-npm test                  # self-tests: routing, orchestrator coercion, classify/parseCitations, drawer logic
+npm test                  # self-tests: routing, safety net, orchestrator coercion, classify, drawer logic, eval math
 ```
+
+Evaluation (reads tickets and the doc index, never writes to the database):
+
+```bash
+npm run eval:run -- --model <slug> --set pilot --seeds 1        # labeled pilot for model selection
+npm run eval:report -- --pilot --budget 0.6                       # rank pilot models, budget-aware pick
+npm run eval:run -- --model <picked> --seeds 1,2,3 --set all      # main run, resumable, spend-capped
+npm run eval:run -- --model <picked>:exacto --seeds 1,2,3 --set all
+npm run eval:report       # → evals/results/summary.json, docs/EVALUATION.md, case study + README tables
+```
+
+If the embedding model ever changes, rebuild the index first: `npm run reembed-docs`.
 
 Required environment variables:
 
@@ -246,9 +290,8 @@ OPENROUTER_MODEL=          # optional — defaults to the free model; see Result
 
 ## What's next
 
-- Investigate a `max_tokens`-truncation failure mode the paid run surfaced —
-  a `JSON.parse` error on `submit_resolution`'s arguments on 1 of 40
-  tickets, likely a long draft response getting cut off mid-payload.
+- Grow the labeled set past 52 tickets and add a second labeler, so the
+  evaluation's intervals tighten and label noise can be measured.
 - Feed the doc-gap signal (tickets with the weakest retrieval match) into an
   actual documentation-planning workflow instead of just surfacing it.
 - Track the confidence-calibration metric (auto-resolves a reviewer later
