@@ -8,8 +8,8 @@
 import { config } from "dotenv";
 config({ path: ".env.local" });
 import { getSupabaseAdmin } from "../src/lib/supabase";
-import { runAgent, type Resolution, type Ticket } from "../src/lib/agent/orchestrator";
-import { route, type Route } from "../src/lib/agent/routing";
+import { runAgentDetailed, type Resolution, type Ticket } from "../src/lib/agent/orchestrator";
+import { cosineRetrievalScore, routeTicket, type Route } from "../src/lib/agent/routing";
 
 type TicketRow = Ticket & { category: string };
 
@@ -104,8 +104,19 @@ async function main() {
     let decision: Route;
     let draftCategory: string | null;
     try {
-      resolution = await runAgent(ticket);
-      decision = route(resolution.category, resolution.retrieval_score, resolution.self_certainty);
+      const run = await runAgentDetailed(ticket);
+      resolution = run.resolution;
+      // Retrieval comes from the vector search's own cosine similarities, not
+      // the model's opinion of them (that opinion stays in the tool_calls log,
+      // as submit_resolution's input). The safety net re-checks the ticket text
+      // for the always-escalate categories, independent of the model's label.
+      resolution.retrieval_score = cosineRetrievalScore(run.similarities);
+      decision = routeTicket({
+        category: resolution.category,
+        retrievalScore: resolution.retrieval_score,
+        selfCertainty: resolution.self_certainty,
+        text: `${ticket.subject}\n\n${ticket.body}`,
+      });
       draftCategory = resolution.category;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

@@ -4,6 +4,8 @@ import { HeroTriage } from "@/components/landing/HeroTriage";
 import { Walkthrough } from "@/components/landing/Walkthrough";
 import { RoutingLab } from "@/components/landing/RoutingLab";
 import { Results } from "@/components/landing/Results";
+import { Evaluation } from "@/components/landing/Evaluation";
+import evalSummary from "../../evals/results/summary.json";
 import { Reveal } from "@/components/landing/Reveal";
 import {
   ArchitectureDiagram,
@@ -134,6 +136,9 @@ export default function IntroPage() {
             <a className={styles.navLink} href="#walkthrough">Walkthrough</a>
             <a className={styles.navLink} href="#routing">Routing math</a>
             <a className={styles.navLink} href="#results">Results</a>
+            {evalSummary.status === "complete" && (
+              <a className={styles.navLink} href="#evaluation">Evaluation</a>
+            )}
             <a className={styles.navLink} href="#engineering">Engineering</a>
           </nav>
           <div className={styles.navCtas}>
@@ -389,6 +394,20 @@ export default function IntroPage() {
           <h2 className={styles.h2}>What &ldquo;free&rdquo; actually costs.</h2>
           <Results />
         </section>
+
+        {/* ── Evaluation (only once a labeled run has been scored) ── */}
+        {evalSummary.status === "complete" && (
+          <section className={styles.section} id="evaluation">
+            <span className={styles.eyebrow}>/evaluation</span>
+            <h2 className={styles.h2}>Scored against hand labels, not vibes.</h2>
+            <p className={styles.lede}>
+              Every ticket has a gold label for where it should go. The headline metric is <b>must-escalate recall</b>: of the
+              tickets that need a human, how many reached one. The expensive failure is an agent that confidently answers a billing
+              dispute or a security report, so that&apos;s the number to protect.
+            </p>
+            <Evaluation />
+          </section>
+        )}
 
         {/* ── Architecture ── */}
         <section className={styles.section} id="architecture">

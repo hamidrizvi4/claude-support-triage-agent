@@ -1,0 +1,585 @@
+/**
+ * Scores the raw eval runs against the gold labels and writes:
+ *   evals/results/summary.json   — consumed by the intro page's evaluation section
+ *   docs/EVALUATION.md           — the full report (tables, confusion matrices)
+ *   docs/eval/risk-coverage.svg  — the risk-coverage figure
+ *   docs/CASE_STUDY.md           — headline numbers between eval markers
+ *
+ * Routing is recomputed here from each run's raw outputs, so every variant
+ * (model-reported vs cosine retrieval, with/without the safety net) is scored
+ * on exactly the same agent runs.
+ *
+ * Usage: npm run eval:report            (main runs in evals/runs/*.jsonl)
+ *        npm run eval:report -- --pilot (model pick from pilot_*.jsonl)
+ */
+import { config } from "dotenv";
+config({ path: ".env.local" });
+import fs from "node:fs";
+import path from "node:path";
+import { getSupabaseAdmin } from "../../src/lib/supabase";
+import {
+  computeConfidence,
+  cosineRetrievalScore,
+  COSINE_CEIL,
+  COSINE_FLOOR,
+  ESCALATE_CATEGORIES,
+  routeTicket,
+} from "../../src/lib/agent/routing";
+import { safetyNet } from "../../src/lib/agent/safetyNet";
+import { goldById, ticketTexts } from "./data";
+import type { RunRecord } from "./run";
+import {
+  aurc,
+  autoResolvePrecision,
+  autoResolveRecall,
+  confusion,
+  coverage,
+  escalationRecall,
+  fisherExact,
+  macroF1,
+  meanRange,
+  optimalAurc,
+  quantile,
+  riskCoverage,
+  routeCounts,
+  wilson,
+  type RouteCounts,
+} from "./metrics";
+
+const ROOT = path.join(__dirname, "..", "..");
+const RUNS = path.join(ROOT, "evals", "runs");
+const CATEGORIES = [
+  "technical_api_error",
+  "feature_question",
+  "account_access",
+  "billing",
+  "security_abuse",
+  "sales_enterprise",
+  "bug_report",
+];
+
+type Gold = { set: "core" | "hard"; gold_category: string; gold_route: string; kind?: string; text?: string };
+
+type Variant = { key: string; label: string; cosine: boolean; net: boolean };
+const VARIANTS: Variant[] = [
+  { key: "before", label: "Model-reported retrieval, no safety net (before)", cosine: false, net: false },
+  { key: "net_only", label: "Model-reported retrieval + safety net", cosine: false, net: true },
+  { key: "cosine_only", label: "Cosine retrieval, no safety net", cosine: true, net: false },
+  { key: "after", label: "Cosine retrieval + safety net (after)", cosine: true, net: true },
+];
+
+function readRuns(prefixPilot: boolean): RunRecord[] {
+  if (!fs.existsSync(RUNS)) return [];
+  return fs
+    .readdirSync(RUNS)
+    .filter((f) => f.endsWith(".jsonl") && f.startsWith("pilot_") === prefixPilot)
+    .flatMap((f) =>
+      fs
+        .readFileSync(path.join(RUNS, f), "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((l) => JSON.parse(l) as RunRecord)
+    );
+}
+
+function retrievalFor(r: RunRecord, cosine: boolean): number {
+  return cosine ? cosineRetrievalScore(r.similarities) : r.model_retrieval ?? 0;
+}
+
+/** True when the operational outcome is "a human sees it": escalated, or never resolved. */
+function predEscalate(r: RunRecord, v: Variant, text: string): { escalate: boolean; reason: string } {
+  if (!r.completed || !r.category) return { escalate: true, reason: "incomplete" };
+  const d = routeTicket({
+    category: r.category,
+    retrievalScore: retrievalFor(r, v.cosine),
+    selfCertainty: r.self_certainty ?? 0,
+    text,
+    useSafetyNet: v.net,
+  });
+  return { escalate: d.status === "escalated", reason: d.reason ?? "auto_resolved" };
+}
+
+type Scored = {
+  n: number;
+  completed: number;
+  counts: RouteCounts;
+  sensitiveTotal: number;
+  sensitiveEscalated: number;
+  categoryCorrect: number;
+  netCatches: number;
+};
+
+function score(runs: RunRecord[], v: Variant, gold: Map<string, Gold>, texts: Map<string, string>): Scored {
+  const pairs: { goldEscalate: boolean; predEscalate: boolean }[] = [];
+  let completed = 0;
+  let sensitiveTotal = 0;
+  let sensitiveEscalated = 0;
+  let categoryCorrect = 0;
+  let netCatches = 0;
+  for (const r of runs) {
+    const g = gold.get(r.ticket_id)!;
+    const text = texts.get(r.ticket_id) ?? "";
+    const p = predEscalate(r, v, text);
+    pairs.push({ goldEscalate: g.gold_route === "escalate", predEscalate: p.escalate });
+    if (r.completed) completed++;
+    if (r.completed && r.category === g.gold_category) categoryCorrect++;
+    if (ESCALATE_CATEGORIES.has(g.gold_category)) {
+      sensitiveTotal++;
+      if (p.escalate) sensitiveEscalated++;
+    }
+    if (p.reason.startsWith("safety_net:")) netCatches++;
+  }
+  return { n: runs.length, completed, counts: routeCounts(pairs), sensitiveTotal, sensitiveEscalated, categoryCorrect, netCatches };
+}
+
+type R = { mean: number; min: number; max: number };
+type VariantOut = {
+  key: string;
+  label: string;
+  escalationRecall: R;
+  escalationRecallCI: number[];
+  unsafeAutoResolves: R;
+  autoResolvePrecision: R;
+  autoResolveRecall: R;
+  coverage: R;
+  sensitiveRecall: R;
+  netCatches: R;
+  pooled: RouteCounts;
+};
+type SetOut = {
+  runs: number;
+  completion: R;
+  categoryAccuracy: number;
+  macroF1: number;
+  perClass: Record<string, { precision: number; recall: number; support: number }>;
+  categoryConfusion: { labels: string[]; matrix: number[][] };
+  variants: VariantOut[];
+  riskCoverage?: ReturnType<typeof riskCoverageFor>;
+  cost: { total: number; perTicket: number };
+  latencyS: number;
+};
+type ExactoSide = {
+  model: string;
+  runs: number;
+  completed: number;
+  counts: RouteCounts;
+  cost: number;
+  latencyS: number;
+  completion: number;
+  escalationRecall: number;
+};
+type Dataset = { core: number; hard: number; coreEscalate: number; coreAuto: number };
+
+const pct = (x: number) => `${(x * 100).toFixed(1)}%`;
+const r3 = (x: number) => Math.round(x * 1000) / 1000;
+
+function groupBy<T>(xs: T[], key: (x: T) => string): Map<string, T[]> {
+  const m = new Map<string, T[]>();
+  for (const x of xs) {
+    const k = key(x);
+    if (!m.has(k)) m.set(k, []);
+    m.get(k)!.push(x);
+  }
+  return m;
+}
+
+async function loadTexts(gold: Map<string, Gold>): Promise<Map<string, string>> {
+  const texts = await ticketTexts(getSupabaseAdmin());
+  for (const [id, g] of gold) if (g.text) texts.set(id, g.text);
+  return texts;
+}
+
+/* ───────────────────────────── pilot / model pick ───────────────────────────── */
+
+async function pilot() {
+  const gold = goldById() as Map<string, Gold>;
+  const texts = await loadTexts(gold);
+  const runs = readRuns(true);
+  if (runs.length === 0) throw new Error("no pilot runs in evals/runs/pilot_*.jsonl");
+  const after = VARIANTS.find((v) => v.key === "after")!;
+  const rows = [...groupBy(runs, (r) => r.model)].map(([model, rs]) => {
+    const s = score(rs, after, gold, texts);
+    const c = s.counts;
+    return {
+      model,
+      runs: rs.length,
+      completion: s.completed / s.n,
+      routingAccuracy: (c.tp + c.tn) / s.n,
+      escalationRecall: escalationRecall(c),
+      categoryAccuracy: s.completed ? s.categoryCorrect / s.completed : 0,
+      costPerTicket: rs.reduce((a, r) => a + r.cost, 0) / rs.length,
+      latencyS: rs.reduce((a, r) => a + r.latency_ms, 0) / rs.length / 1000,
+    };
+  });
+  // The main run is (core + hard) tickets × 3 seeds × 2 configs (with and
+  // without Exacto); a model only qualifies if that fits the remaining budget.
+  const argv = process.argv;
+  const budget = Number(argv[argv.indexOf("--budget") + 1]) || Infinity;
+  const mainRuns = gold.size * 3 * 2;
+  const projected = new Map(rows.map((r) => [r.model, r.costPerTicket * mainRuns]));
+  // Best routing first; safety (escalation recall) breaks ties; then price.
+  rows.sort(
+    (a, b) =>
+      b.routingAccuracy - a.routingAccuracy ||
+      b.escalationRecall - a.escalationRecall ||
+      b.categoryAccuracy - a.categoryAccuracy ||
+      a.costPerTicket - b.costPerTicket
+  );
+  console.log("\nPilot (same 12 labeled tickets, seed 1, routing = cosine + safety net):\n");
+  console.log("model                              runs  complete  route-acc  esc-recall  cat-acc  $/ticket  latency  projected main run");
+  for (const r of rows) {
+    console.log(
+      `${r.model.padEnd(34)} ${String(r.runs).padStart(4)}  ${pct(r.completion).padStart(8)}  ${pct(r.routingAccuracy).padStart(9)}  ${pct(
+        r.escalationRecall
+      ).padStart(10)}  ${pct(r.categoryAccuracy).padStart(7)}  ${r.costPerTicket.toFixed(5)}  ${r.latencyS.toFixed(1).padStart(6)}s  $${projected
+        .get(r.model)!
+        .toFixed(2)}${projected.get(r.model)! > budget ? " (over budget)" : ""}`
+    );
+  }
+  const affordable = rows.filter((r) => projected.get(r.model)! <= budget);
+  const picked = (affordable[0] ?? rows[0]).model;
+  fs.mkdirSync(path.join(ROOT, "evals", "results"), { recursive: true });
+  fs.writeFileSync(
+    path.join(ROOT, "evals", "results", "model-pick.json"),
+    JSON.stringify(
+      {
+        picked,
+        rule: "highest routing accuracy (cosine + safety net) on the labeled pilot, then must-escalate recall, then category accuracy, then price — among models whose projected main run fits the budget",
+        budget: Number.isFinite(budget) ? budget : null,
+        mainRuns,
+        rows: rows.map((r) => ({ ...r, projectedMainRun: projected.get(r.model) })),
+      },
+      null,
+      2
+    ) + "\n"
+  );
+  console.log(`\nPicked: ${picked}${affordable.length < rows.length ? ` (budget $${budget}; ${rows.length - affordable.length} model(s) excluded as over budget)` : ""}`);
+}
+
+/* ─────────────────────────────────── main report ─────────────────────────────── */
+
+type SignalKey = "blend_model" | "blend_cosine" | "cosine" | "certainty" | "model_retrieval";
+const SIGNALS: { key: SignalKey; label: string; fn: (r: RunRecord) => number }[] = [
+  { key: "blend_cosine", label: "0.6·cosine + 0.4·certainty (new)", fn: (r) => computeConfidence(cosineRetrievalScore(r.similarities), r.self_certainty ?? 0) },
+  { key: "blend_model", label: "0.6·model-reported + 0.4·certainty (old)", fn: (r) => computeConfidence(r.model_retrieval ?? 0, r.self_certainty ?? 0) },
+  { key: "cosine", label: "Cosine similarity alone", fn: (r) => cosineRetrievalScore(r.similarities) },
+  { key: "certainty", label: "Self-certainty alone", fn: (r) => r.self_certainty ?? 0 },
+  { key: "model_retrieval", label: "Model-reported retrieval alone", fn: (r) => r.model_retrieval ?? 0 },
+];
+
+function riskCoverageFor(runs: RunRecord[], gold: Map<string, Gold>, texts: Map<string, string>) {
+  // Same candidate pool for every signal: completed runs a threshold could
+  // auto-resolve, i.e. not already escalated by the category rule or the net.
+  const candidates = runs.filter(
+    (r) => r.completed && r.category && !ESCALATE_CATEGORIES.has(r.category) && !safetyNet(texts.get(r.ticket_id) ?? "")
+  );
+  const total = runs.length;
+  const base = candidates.filter((r) => gold.get(r.ticket_id)!.gold_route === "escalate").length / Math.max(1, candidates.length);
+  const opt = optimalAurc(candidates.map((r) => ({ error: gold.get(r.ticket_id)!.gold_route === "escalate" })));
+  const signals = SIGNALS.map((s) => {
+    const scored = candidates.map((r) => ({ score: s.fn(r), error: gold.get(r.ticket_id)!.gold_route === "escalate" }));
+    const pts = riskCoverage(scored, total);
+    const at = (t: number) => {
+      const auto = scored.filter((x) => x.score >= t);
+      return { coverage: auto.length / total, risk: auto.length ? auto.filter((x) => x.error).length / auto.length : 0, automated: auto.length };
+    };
+    return {
+      key: s.key,
+      label: s.label,
+      aurc: r3(aurc(scored)),
+      points: pts.map((p) => ({ c: r3(p.coverage), r: r3(p.risk) })),
+      at08: s.key.startsWith("blend") ? at(0.8) : null,
+    };
+  });
+  return { candidates: candidates.length, total, baseRisk: r3(base), optimalAurc: r3(opt), signals };
+}
+
+function rcSvg(rc: ReturnType<typeof riskCoverageFor>): string {
+  const W = 640;
+  const H = 360;
+  const L = 56;
+  const B = 44;
+  const T = 20;
+  const R = 20;
+  const maxC = Math.max(0.05, ...rc.signals.flatMap((s) => s.points.map((p) => p.c)));
+  const x = (c: number) => L + (c / maxC) * (W - L - R);
+  const y = (r: number) => T + (1 - r) * (H - T - B);
+  const colors: Record<string, string> = {
+    blend_cosine: "#0A7A5E",
+    blend_model: "#A9550A",
+    cosine: "#3E6E9E",
+    certainty: "#8A8F96",
+    model_retrieval: "#B3261E",
+  };
+  const lines = rc.signals
+    .map((s) => {
+      const d = [`M ${x(0)} ${y(s.points[0]?.r ?? 0)}`, ...s.points.map((p) => `L ${x(p.c).toFixed(1)} ${y(p.r).toFixed(1)}`)].join(" ");
+      const dash = s.key === "blend_cosine" || s.key === "blend_model" ? "" : ' stroke-dasharray="4 4"';
+      return `<path d="${d}" fill="none" stroke="${colors[s.key]}" stroke-width="${s.key.startsWith("blend") ? 2.2 : 1.4}"${dash}/>`;
+    })
+    .join("\n  ");
+  const legend = rc.signals
+    .map((s, i) => `<g transform="translate(${L + 10}, ${T + 12 + i * 16})"><rect width="10" height="3" y="-3" fill="${colors[s.key]}"/><text x="16" y="1" font-size="11" font-family="monospace" fill="#14171A">${s.label} · AURC ${s.aurc.toFixed(3)}</text></g>`)
+    .join("\n  ");
+  const ticks = [0, 0.25, 0.5, 0.75, 1]
+    .map((t) => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}" stroke="#E3E5E8"/><text x="${L - 8}" y="${y(t) + 4}" font-size="10" text-anchor="end" font-family="monospace" fill="#565D66">${t}</text>`)
+    .join("");
+  const xt = [0, maxC / 2, maxC].map((t) => `<text x="${x(t)}" y="${H - B + 16}" font-size="10" text-anchor="middle" font-family="monospace" fill="#565D66">${(t * 100).toFixed(0)}%</text>`).join("");
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">
+  <rect width="${W}" height="${H}" fill="#FFFFFF"/>
+  ${ticks}${xt}
+  <line x1="${L}" x2="${L}" y1="${T}" y2="${H - B}" stroke="#CBCFD4"/>
+  <line x1="${L}" x2="${W - R}" y1="${H - B}" y2="${H - B}" stroke="#CBCFD4"/>
+  <line x1="${L}" x2="${W - R}" y1="${y(rc.baseRisk)}" y2="${y(rc.baseRisk)}" stroke="#14171A" stroke-dasharray="2 3" opacity="0.5"/>
+  ${lines}
+  ${legend}
+  <text x="${(L + W - R) / 2}" y="${H - 8}" font-size="11" text-anchor="middle" font-family="monospace" fill="#14171A">coverage: share of all tickets auto-resolved</text>
+  <text x="14" y="${(T + H - B) / 2}" font-size="11" text-anchor="middle" font-family="monospace" fill="#14171A" transform="rotate(-90 14 ${(T + H - B) / 2})">risk: auto-resolved but should have escalated</text>
+</svg>
+`;
+}
+
+function mdMatrix(c: { labels: string[]; matrix: number[][] }, rowTitle: string): string {
+  const short = (l: string) => l.replace("technical_api_error", "technical").replace("feature_question", "feature").replace("account_access", "account").replace("security_abuse", "security").replace("sales_enterprise", "sales").replace("bug_report", "bug");
+  const head = `| ${rowTitle} ↓ / predicted → | ${c.labels.map(short).join(" | ")} |`;
+  const sep = `|---|${c.labels.map(() => "---:").join("|")}|`;
+  const rows = c.labels.map((l, i) => `| **${short(l)}** | ${c.matrix[i].map((v, j) => (i === j ? `**${v}**` : v ? String(v) : "·")).join(" | ")} |`);
+  return [head, sep, ...rows].join("\n");
+}
+
+async function main() {
+  if (process.argv.includes("--pilot")) return pilot();
+
+  const gold = goldById() as Map<string, Gold>;
+  const texts = await loadTexts(gold);
+  const all = readRuns(false);
+  if (all.length === 0) throw new Error("no runs in evals/runs/*.jsonl — run `npm run eval:run` first");
+
+  const models = [...new Set(all.map((r) => r.model))].sort();
+  const seeds = [...new Set(all.map((r) => r.seed))].sort();
+  const exactoModel = models.find((m) => m.endsWith(":exacto")) ?? models[0];
+  const primary = exactoModel; // the configuration the report leads with
+
+  // Unlabeled calibration of the cosine band: best-match similarity per run.
+  const bestSims = all.filter((r) => r.similarities.length).map((r) => Math.max(...r.similarities));
+  const cal = { p10: r3(quantile(bestSims, 0.1)), p50: r3(quantile(bestSims, 0.5)), p90: r3(quantile(bestSims, 0.9)), floor: COSINE_FLOOR, ceil: COSINE_CEIL };
+
+  const dataset: Dataset = {
+    core: [...gold.values()].filter((g) => g.set === "core").length,
+    hard: [...gold.values()].filter((g) => g.set === "hard").length,
+    coreEscalate: [...gold.values()].filter((g) => g.set === "core" && g.gold_route === "escalate").length,
+    coreAuto: [...gold.values()].filter((g) => g.set === "core" && g.gold_route === "auto_resolve").length,
+  };
+  const out: Record<string, unknown> = {
+    status: "complete",
+    generatedAt: new Date().toISOString(),
+    seeds,
+    models,
+    primary,
+    dataset,
+    cosine: cal,
+  };
+
+  const byModel = groupBy(all, (r) => r.model);
+  const perModel: Record<string, { core?: SetOut; hard?: SetOut }> = {};
+  const md: string[] = [];
+
+  for (const model of models) {
+    const runs = byModel.get(model)!;
+    const sets: { core?: SetOut; hard?: SetOut } = {};
+    for (const set of ["core", "hard"] as const) {
+      const rs = runs.filter((r) => gold.get(r.ticket_id)?.set === set);
+      if (!rs.length) continue;
+      const variants: VariantOut[] = VARIANTS.map((v) => {
+        const perSeed = seeds.map((s) => score(rs.filter((r) => r.seed === s), v, gold, texts)).filter((x) => x.n > 0);
+        const pooled = score(rs, v, gold, texts);
+        const metric = (f: (s: Scored) => number) => {
+          const mr = meanRange(perSeed.map(f));
+          return { mean: r3(mr.mean), min: r3(mr.min), max: r3(mr.max) };
+        };
+        const c = pooled.counts;
+        return {
+          key: v.key,
+          label: v.label,
+          escalationRecall: metric((s) => escalationRecall(s.counts)),
+          escalationRecallCI: wilson(c.tp, c.tp + c.fn).map(r3),
+          unsafeAutoResolves: metric((s) => s.counts.fn),
+          autoResolvePrecision: metric((s) => autoResolvePrecision(s.counts)),
+          autoResolveRecall: metric((s) => autoResolveRecall(s.counts)),
+          coverage: metric((s) => coverage(s.counts)),
+          sensitiveRecall: metric((s) => (s.sensitiveTotal ? s.sensitiveEscalated / s.sensitiveTotal : 1)),
+          netCatches: metric((s) => s.netCatches),
+          pooled: c,
+        };
+      });
+      const completion = meanRange(seeds.map((s) => rs.filter((r) => r.seed === s)).filter((x) => x.length).map((x) => x.filter((r) => r.completed).length / x.length));
+      const done = rs.filter((r) => r.completed && r.category);
+      const cat = confusion(
+        done.map((r) => ({ gold: gold.get(r.ticket_id)!.gold_category, pred: CATEGORIES.includes(r.category!) ? r.category! : "technical_api_error" })),
+        CATEGORIES
+      );
+      const f1 = macroF1(cat);
+      sets[set] = {
+        runs: rs.length,
+        completion: { mean: r3(completion.mean), min: r3(completion.min), max: r3(completion.max) },
+        categoryAccuracy: r3(done.filter((r) => r.category === gold.get(r.ticket_id)!.gold_category).length / Math.max(1, done.length)),
+        macroF1: r3(f1.macro),
+        perClass: Object.fromEntries(Object.entries(f1.perClass).map(([k, v]) => [k, { precision: r3(v.precision), recall: r3(v.recall), support: v.support }])),
+        categoryConfusion: cat,
+        variants,
+        riskCoverage: set === "core" ? riskCoverageFor(rs, gold, texts) : undefined,
+        cost: { total: r3(rs.reduce((a, r) => a + r.cost, 0)), perTicket: rs.reduce((a, r) => a + r.cost, 0) / rs.length },
+        latencyS: r3(rs.reduce((a, r) => a + r.latency_ms, 0) / rs.length / 1000),
+      };
+    }
+    perModel[model] = sets;
+  }
+  out.perModel = perModel;
+
+  // Same-model comparison: base routing vs :exacto, pooled over seeds, core set.
+  const baseModel = models.find((m) => !m.endsWith(":exacto"));
+  let exacto: { base: ExactoSide; exacto: ExactoSide; completionP: number; escalationRecallP: number } | null = null;
+  if (baseModel && models.includes(`${baseModel}:exacto`)) {
+    const after = VARIANTS.find((v) => v.key === "after")!;
+    const cmp = [baseModel, `${baseModel}:exacto`].map((m) => {
+      const rs = byModel.get(m)!.filter((r) => gold.get(r.ticket_id)?.set === "core");
+      const s = score(rs, after, gold, texts);
+      return { model: m, runs: rs.length, completed: s.completed, counts: s.counts, cost: rs.reduce((a, r) => a + r.cost, 0) / rs.length, latencyS: rs.reduce((a, r) => a + r.latency_ms, 0) / rs.length / 1000 };
+    });
+    const [a, b] = cmp;
+    exacto = {
+      base: { ...a, completion: r3(a.completed / a.runs), escalationRecall: r3(escalationRecall(a.counts)) },
+      exacto: { ...b, completion: r3(b.completed / b.runs), escalationRecall: r3(escalationRecall(b.counts)) },
+      completionP: fisherExact(a.completed, a.runs - a.completed, b.completed, b.runs - b.completed),
+      escalationRecallP: fisherExact(a.counts.tp, a.counts.fn, b.counts.tp, b.counts.fn),
+    };
+    out.exacto = exacto;
+  }
+
+  /* ── write summary.json ── */
+  fs.mkdirSync(path.join(ROOT, "evals", "results"), { recursive: true });
+  fs.writeFileSync(path.join(ROOT, "evals", "results", "summary.json"), JSON.stringify(out, null, 2) + "\n");
+
+  /* ── markdown report ── */
+  const P = perModel[primary].core!;
+  const H = perModel[primary].hard;
+  const v = (sets: SetOut, key: string) => sets.variants.find((x) => x.key === key)!;
+  const fmt = (m: { mean: number; min: number; max: number }, asPct = true) =>
+    asPct ? `${pct(m.mean)} (${pct(m.min)}–${pct(m.max)})` : `${m.mean.toFixed(1)} (${m.min}–${m.max})`;
+
+  md.push(`# Evaluation`, ``);
+  md.push(`*Generated by \`npm run eval:report\` on ${new Date().toISOString().slice(0, 10)} — do not edit by hand.*`, ``);
+  md.push(`## What was measured`, ``);
+  md.push(
+    `The agent was run on **${dataset.core} labeled tickets** (the original synthetic set) and **${dataset.hard} author-written hard cases**, ` +
+      `**${seeds.length} times each** (seeds ${seeds.join(", ")}), with ${models.map((m) => `\`${m}\``).join(" and ")}. ` +
+      `Every number below is the mean over seeds, with the min–max across seeds in parentheses. Runs never write to the database.`,
+    ``
+  );
+  md.push(`**Headline metric: must-escalate recall** — of the tickets the gold labels say need a human, the share the system actually routed to one. ` +
+    `An unsafe auto-resolve (a billing dispute or security report answered by the bot) is the expensive failure, so this is the number to protect; ` +
+    `auto-resolve precision and coverage say what that safety costs.`, ``);
+  md.push(`Gold labels: [\`evals/labels.json\`](../evals/labels.json) (labeling policy inside) and [\`evals/hard-cases.json\`](../evals/hard-cases.json). ` +
+    `Incomplete runs (no valid \`submit_resolution\`) count as escalated, because that is what happens to them in production.`, ``);
+
+  md.push(`## Results — ${primary}, original ${dataset.core} tickets`, ``);
+  md.push(`| Routing | Must-escalate recall | Unsafe auto-resolves / run | Auto-resolve precision | Coverage |`);
+  md.push(`|---|---:|---:|---:|---:|`);
+  for (const x of P.variants) {
+    md.push(`| ${x.label} | ${fmt(x.escalationRecall)} | ${fmt(x.unsafeAutoResolves, false)} | ${fmt(x.autoResolvePrecision)} | ${fmt(x.coverage)} |`);
+  }
+  md.push(``, `Completion rate (valid \`submit_resolution\`): ${fmt(P.completion)}. Category accuracy ${pct(P.categoryAccuracy)}, macro-F1 ${P.macroF1.toFixed(3)} (pooled over seeds, completed runs).`, ``);
+
+  md.push(`### Routing confusion (pooled over ${seeds.length} seeds)`, ``);
+  for (const key of ["before", "after"]) {
+    const c = v(P, key).pooled as RouteCounts;
+    md.push(`**${v(P, key).label}**`, ``);
+    md.push(`| gold ↓ / routed → | escalated | auto-resolved |`, `|---|---:|---:|`);
+    md.push(`| **needs a human** | ${c.tp} | ${c.fn} |`, `| **docs-answerable** | ${c.fp} | ${c.tn} |`, ``);
+  }
+
+  md.push(`### Category confusion (${primary}, pooled, completed runs)`, ``);
+  md.push(mdMatrix(P.categoryConfusion, "gold"), ``);
+
+  md.push(`## Risk-coverage: which confidence signal ranks tickets best?`, ``);
+  const rc = P.riskCoverage!;
+  md.push(
+    `Among the ${rc.candidates} completed runs a threshold could auto-resolve (not already escalated by the category rule or safety net), ` +
+      `tickets are sorted by each signal and auto-resolved from the top down. Lower AURC = the signal puts the tickets that need a human last. ` +
+      `A perfect ranking scores ${rc.optimalAurc.toFixed(3)}; ignoring the signal entirely scores about ${rc.baseRisk.toFixed(3)} (the base error rate).`,
+    ``
+  );
+  md.push(`![Risk-coverage curves](eval/risk-coverage.svg)`, ``);
+  md.push(`| Signal | AURC ↓ | At the 0.8 threshold |`, `|---|---:|---|`);
+  for (const s of rc.signals) {
+    md.push(`| ${s.label} | ${s.aurc.toFixed(3)} | ${s.at08 ? `${pct(s.at08.coverage)} coverage, ${pct(s.at08.risk)} risk` : "—"} |`);
+  }
+  md.push(``, `Cosine band (unlabeled calibration): best-match similarity p10 = ${cal.p10}, median = ${cal.p50}, p90 = ${cal.p90}; production rescales [${cal.floor}, ${cal.ceil}] → [0, 1].`, ``);
+
+  if (exacto) {
+    const e = exacto;
+    md.push(`## Same model, with and without Exacto routing`, ``);
+    md.push(`| Config | Completion | Must-escalate recall | $ / ticket | Latency |`, `|---|---:|---:|---:|---:|`);
+    for (const x of [e.base, e.exacto]) md.push(`| \`${x.model}\` | ${pct(x.completion)} | ${pct(x.escalationRecall)} | $${x.cost.toFixed(5)} | ${x.latencyS.toFixed(1)}s |`);
+    md.push(``, `Fisher exact (pooled runs): completion p = ${e.completionP.toFixed(3)}, must-escalate recall p = ${e.escalationRecallP.toFixed(3)}. ` +
+      `Only the provider routing differs, so any gap here is Exacto's, not the model's.`, ``);
+  }
+
+  if (H) {
+    md.push(`## Hard cases (stress test, ${dataset.hard} tickets)`, ``);
+    md.push(`Written by the same author as the safety net, so read these as a stress test rather than an unbiased estimate.`, ``);
+    md.push(`| Routing | Must-escalate recall | Unsafe auto-resolves / run | Auto-resolve precision |`, `|---|---:|---:|---:|`);
+    for (const x of H.variants) md.push(`| ${x.label} | ${fmt(x.escalationRecall)} | ${fmt(x.unsafeAutoResolves, false)} | ${fmt(x.autoResolvePrecision)} |`);
+    md.push(``);
+  }
+
+  md.push(`## Caveats`, ``);
+  md.push(
+    `- ${dataset.core + dataset.hard} tickets is small: seed-to-seed ranges and the Wilson interval on must-escalate recall (${pct(v(P, "after").escalationRecallCI[0])}–${pct(v(P, "after").escalationRecallCI[1])}, pooled) are reported so nothing reads as more precise than it is.`,
+    `- Pooled counts treat repeated runs of the same ticket as separate trials; they are not independent, so pooled intervals are optimistic.`,
+    `- Labels were made by one labeler (Claude) against a written policy; ambiguous calls are noted per ticket in the label files.`,
+    `- Seeds are passed through but not every provider honours them; the runs are best read as ${seeds.length} independent samples.`,
+    ``
+  );
+  md.push(`Total eval spend: $${models.reduce((a, m) => a + (perModel[m].core?.cost.total ?? 0) + (perModel[m].hard?.cost.total ?? 0), 0).toFixed(3)}.`, ``);
+
+  fs.mkdirSync(path.join(ROOT, "docs", "eval"), { recursive: true });
+  fs.writeFileSync(path.join(ROOT, "docs", "EVALUATION.md"), md.join("\n"));
+  fs.writeFileSync(path.join(ROOT, "docs", "eval", "risk-coverage.svg"), rcSvg(rc));
+
+  /* ── headline table in the case study and README, between eval markers ── */
+  const b = v(P, "before");
+  const a = v(P, "after");
+  const headline = (reportLink: string) =>
+    [
+      "<!-- eval:start -->",
+      `| ${primary}, ${dataset.core} labeled tickets × ${seeds.length} seeds | Before | After |`,
+      `|---|---:|---:|`,
+      `| Must-escalate recall | ${fmt(b.escalationRecall)} | ${fmt(a.escalationRecall)} |`,
+      `| Unsafe auto-resolves per run | ${fmt(b.unsafeAutoResolves, false)} | ${fmt(a.unsafeAutoResolves, false)} |`,
+      `| Auto-resolve precision | ${fmt(b.autoResolvePrecision)} | ${fmt(a.autoResolvePrecision)} |`,
+      `| Coverage (share auto-resolved) | ${fmt(b.coverage)} | ${fmt(a.coverage)} |`,
+      ``,
+      `*Before: model-reported retrieval score, no safety net. After: cosine retrieval + safety net. Mean over seeds, min–max in parentheses. Full report: [EVALUATION.md](${reportLink}).*`,
+      "<!-- eval:end -->",
+    ].join("\n");
+  for (const [file, link] of [
+    [path.join(ROOT, "docs", "CASE_STUDY.md"), "EVALUATION.md"],
+    [path.join(ROOT, "README.md"), "docs/EVALUATION.md"],
+  ]) {
+    if (!fs.existsSync(file)) continue;
+    const text = fs.readFileSync(file, "utf8");
+    const i = text.indexOf("<!-- eval:start -->");
+    const j = text.indexOf("<!-- eval:end -->");
+    if (i < 0 || j < 0) continue;
+    fs.writeFileSync(file, text.slice(0, i) + headline(link) + text.slice(j + "<!-- eval:end -->".length));
+  }
+
+  console.log(md.join("\n"));
+  console.log(`\nWrote evals/results/summary.json, docs/EVALUATION.md, docs/eval/risk-coverage.svg`);
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

@@ -2060,3 +2060,215 @@
     text-align: left;
   }
 }
+
+/* ── Evaluation (rendered from evals/results/summary.json) ── */
+
+.evalKpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin-top: var(--space-12);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+
+.evalKpi {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-6) var(--space-6) var(--space-6) 0;
+}
+
+.evalKpi + .evalKpi {
+  padding-left: var(--space-6);
+  border-left: 1px solid var(--border);
+}
+
+.evalLabel {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.evalValue {
+  margin-top: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: 34px;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.evalWas {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.evalRange {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+
+.evalFoot {
+  max-width: 80ch;
+  margin-top: var(--space-4);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.evalFoot code,
+.about code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-hover);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--text-primary);
+}
+
+.evalTwo {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  gap: var(--space-8);
+  align-items: start;
+  margin-top: var(--space-12);
+}
+
+.aurcList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-6);
+}
+
+.aurcList li {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+
+.aurcList b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.evalGrids {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-6);
+}
+
+.evalGridTitle {
+  margin-bottom: var(--space-3);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.routeGrid {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr) minmax(0, 1fr);
+  gap: 4px;
+}
+
+.routeHead {
+  padding-bottom: 2px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--text-tertiary);
+}
+
+.routeRow {
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.routeCell {
+  padding: var(--space-3) 0;
+  border-radius: var(--radius-sm);
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cellGood {
+  background: var(--resolve-tint);
+  color: var(--resolve);
+}
+
+.cellBad {
+  background: var(--critical-tint);
+  color: var(--critical);
+}
+
+.cellMeh {
+  background: var(--escalate-tint);
+  color: var(--escalate);
+}
+
+.heat {
+  display: grid;
+  gap: 3px;
+}
+
+.heatHead {
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-tertiary);
+}
+
+.heatRow {
+  display: flex;
+  align-items: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.heatCell {
+  padding: 7px 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+@media (max-width: 960px) {
+  .evalKpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .evalKpi:nth-child(3) {
+    padding-left: 0;
+    border-left: none;
+  }
+  .evalKpi:nth-child(n + 3) {
+    border-top: 1px solid var(--border);
+  }
+  .evalTwo {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .evalValue {
+    font-size: 26px;
+  }
+  .routeGrid {
+    grid-template-columns: 96px minmax(0, 1fr) minmax(0, 1fr);
+  }
+}

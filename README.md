@@ -232,8 +232,20 @@ npm run dev                # intro at /, review queue at /queue, dashboard at /d
 ```
 
 ```bash
-npm test                  # self-tests: routing, orchestrator coercion, classify/parseCitations, drawer logic
+npm test                  # self-tests: routing, safety net, orchestrator coercion, classify, drawer logic, eval math
 ```
+
+Evaluation (reads tickets and the doc index, never writes to the database):
+
+```bash
+npm run eval:run -- --model <slug> --set pilot --seeds 1        # labeled pilot for model selection
+npm run eval:report -- --pilot --budget 0.6                       # rank pilot models, budget-aware pick
+npm run eval:run -- --model <picked> --seeds 1,2,3 --set all      # main run, resumable, spend-capped
+npm run eval:run -- --model <picked>:exacto --seeds 1,2,3 --set all
+npm run eval:report       # → evals/results/summary.json, docs/EVALUATION.md, case study + README tables
+```
+
+If the embedding model ever changes, rebuild the index first: `npm run reembed-docs`.
 
 Required environment variables:
 
@@ -246,9 +258,8 @@ OPENROUTER_MODEL=          # optional — defaults to the free model; see Result
 
 ## What's next
 
-- Investigate a `max_tokens`-truncation failure mode the paid run surfaced —
-  a `JSON.parse` error on `submit_resolution`'s arguments on 1 of 40
-  tickets, likely a long draft response getting cut off mid-payload.
+- Grow the labeled set past 52 tickets and add a second labeler, so the
+  evaluation's intervals tighten and label noise can be measured.
 - Feed the doc-gap signal (tickets with the weakest retrieval match) into an
   actual documentation-planning workflow instead of just surfacing it.
 - Track the confidence-calibration metric (auto-resolves a reviewer later

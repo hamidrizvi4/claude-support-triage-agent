@@ -154,8 +154,9 @@ export function Results() {
         <p>
           The agent defaults to a free model, so I measured what that costs. I ran the same tickets
           through the same routing formula twice and changed only the model. Half the free
-          runs never finished: the model skipped its own required output call. Exacto routing cut
-          that to 3 of 40, and the whole paid run cost a quarter.
+          runs never finished: the model skipped its own required output call. A paid model on
+          Exacto routing cut that to 3 of 40, and the whole paid run cost a quarter. That run changed
+          the model and the routing together, so the evaluation below separates them.
         </p>
         <div className={styles.method}>
           <h4>Methodology</h4>

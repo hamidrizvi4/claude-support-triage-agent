@@ -1,0 +1,410 @@
+{
+  "description": "Gold labels for the 40 synthetic tickets in the tickets table (original eval set).",
+  "labeler": "Claude, from the full ticket text, before any eval run was scored. Spot-check welcome: edit and re-run `npm run eval:report`.",
+  "policy": {
+    "gold_category": "Where a senior support engineer would file the ticket (the agent's 7-way enum).",
+    "gold_route": "escalate if the category is billing, security_abuse, sales_enterprise or bug_report, OR a correct, complete answer needs something the public docs can't provide (account-level inspection, an engineering investigation, a behaviour that contradicts the docs). auto_resolve only when a doc-grounded answer would resolve the ticket."
+  },
+  "tickets": [
+    {
+      "id": "f3a32770-0143-4c9d-bde9-e97318af85b0",
+      "n": 1,
+      "subject": "Prompt caching pricing - how are cache writes billed?",
+      "seed_category": "informational",
+      "gold_category": "feature_question",
+      "gold_route": "auto_resolve",
+      "rationale": "Pricing mechanics of prompt caching are documented; a question about pricing, not a dispute about a charge.",
+      "pilot": true
+    },
+    {
+      "id": "93458117-dde7-4b42-ae3b-2afbb574cef1",
+      "n": 2,
+      "subject": "Potential prompt injection bypassing content filter on claude-3-opus",
+      "seed_category": "security",
+      "gold_category": "security_abuse",
+      "gold_route": "escalate",
+      "rationale": "Safety-filter bypass report with a PoC.",
+      "pilot": true
+    },
+    {
+      "id": "9caae2e2-65fc-49b0-9e99-e5785f30c5f6",
+      "n": 3,
+      "subject": "Procurement needs vendor security docs + MSA for Claude 3 Opus",
+      "seed_category": "sales",
+      "gold_category": "sales_enterprise",
+      "gold_route": "escalate",
+      "rationale": "Procurement packet, MSA/DPA, PrivateLink: enterprise sales.",
+      "pilot": false
+    },
+    {
+      "id": "d917f3e2-705e-470a-bcd9-aea6f9a8bd0f",
+      "n": 4,
+      "subject": "Unauthorized API key creation on our organization account",
+      "seed_category": "security",
+      "gold_category": "security_abuse",
+      "gold_route": "escalate",
+      "rationale": "Unauthorized key creation from a deactivated account; asks for audit logs.",
+      "pilot": false
+    },
+    {
+      "id": "58772727-e669-4619-aaed-ad6097c21a58",
+      "n": 5,
+      "subject": "Intermittent 529 errors + question about prompt caching pricing",
+      "seed_category": "ambiguous",
+      "gold_category": "technical_api_error",
+      "gold_route": "auto_resolve",
+      "rationale": "529 overloaded handling and cache usage fields are both documented.",
+      "pilot": false
+    },
+    {
+      "id": "a43e09f7-a8e7-401b-bec9-1bb94d7ea61b",
+      "n": 6,
+      "subject": "Unexpected $47.32 charge - thought I was still on free tier",
+      "seed_category": "billing",
+      "gold_category": "billing",
+      "gold_route": "escalate",
+      "rationale": "Disputes a specific charge on the account.",
+      "pilot": true
+    },
+    {
+      "id": "d3829a35-344c-44de-b7fd-69fc0a906f21",
+      "n": 7,
+      "subject": "Refund request - runaway batch job burned $200+ in 2 hours",
+      "seed_category": "billing",
+      "gold_category": "billing",
+      "gold_route": "escalate",
+      "rationale": "Refund / goodwill request against a specific invoice.",
+      "pilot": false
+    },
+    {
+      "id": "74706ba8-0963-4509-af0f-3d58021e224e",
+      "n": 8,
+      "subject": "Streaming responses cutting off mid-sentence with claude-3-opus-20240229",
+      "seed_category": "ambiguous",
+      "gold_category": "technical_api_error",
+      "gold_route": "auto_resolve",
+      "rationale": "stop_reason arrives in message_delta, not content deltas; documented streaming event flow.",
+      "pilot": true
+    },
+    {
+      "id": "e0370d52-732d-4105-956e-f550546b8371",
+      "n": 9,
+      "subject": "Reporting API misuse: bulk generation of phishing templates via claude-3-haiku",
+      "seed_category": "security",
+      "gold_category": "security_abuse",
+      "gold_route": "escalate",
+      "rationale": "Third-party abuse report (phishing generation).",
+      "pilot": false
+    },
+    {
+      "id": "4c475016-5608-4c5c-9900-a4d16e6e08b0",
+      "n": 10,
+      "subject": "Invoice line items don't match usage dashboard",
+      "seed_category": "billing",
+      "gold_category": "billing",
+      "gold_route": "escalate",
+      "rationale": "Invoice does not reconcile with usage; needs account-level investigation.",
+      "pilot": false
+    },
+    {
+      "id": "cbcff88a-247a-42c8-9a1b-0b526772bab4",
+      "n": 11,
+      "subject": "TypeScript SDK throws `APIError: 400` but response body has `error.type: \"server_error\"`",
+      "seed_category": "bug",
+      "gold_category": "bug_report",
+      "gold_route": "escalate",
+      "rationale": "Reports the API returning an inconsistent status/error type; platform bug claim.",
+      "pilot": true
+    },
+    {
+      "id": "03c90618-fbe7-4113-b760-097a4cd010a2",
+      "n": 12,
+      "subject": "Rate limit headers missing on 429 responses - python sdk v0.28.1",
+      "seed_category": "informational",
+      "gold_category": "technical_api_error",
+      "gold_route": "auto_resolve",
+      "rationale": "Rate-limit headers exist on 429s; with the SDK they are on the raised exception, not a return value.",
+      "pilot": true
+    },
+    {
+      "id": "80ee73f6-523a-4628-be78-e565d1c6da00",
+      "n": 13,
+      "subject": "Max tokens limit for claude-3-5-haiku-20241022 - docs say 8192 but getting error at 4096",
+      "seed_category": "informational",
+      "gold_category": "bug_report",
+      "gold_route": "escalate",
+      "rationale": "Observed limit contradicts documented max output; needs engineering, not a docs answer.",
+      "pilot": false
+    },
+    {
+      "id": "75a8de58-5a0b-4824-a2d0-52f5ea63f81b",
+      "n": 14,
+      "subject": "Tool use schema validation error: \"input_schema must be a JSON Schema object\"",
+      "seed_category": "informational",
+      "gold_category": "technical_api_error",
+      "gold_route": "escalate",
+      "rationale": "Schema shown is valid per docs, so docs alone can't resolve the error; needs request inspection.",
+      "pilot": true
+    },
+    {
+      "id": "6abc9579-e11f-461a-a399-b6ead53ae194",
+      "n": 15,
+      "subject": "Streaming + tool use: how to handle partial tool_calls?",
+      "seed_category": "informational",
+      "gold_category": "feature_question",
+      "gold_route": "auto_resolve",
+      "rationale": "input_json_delta accumulation is documented in the streaming guide.",
+      "pilot": false
+    },
+    {
+      "id": "f8c3febc-d079-4a9a-9f73-243348337301",
+      "n": 16,
+      "subject": "Charged for opus but I only use sonnet/haiku",
+      "seed_category": "billing",
+      "gold_category": "billing",
+      "gold_route": "escalate",
+      "rationale": "Charge for a model the customer says they never called; billing (possible key misuse).",
+      "pilot": false
+    },
+    {
+      "id": "d9e47813-a213-4b59-83c4-2322625fe8e8",
+      "n": 17,
+      "subject": "Double billed? Two invoices same period, same usage numbers",
+      "seed_category": "billing",
+      "gold_category": "billing",
+      "gold_route": "escalate",
+      "rationale": "Duplicate invoices; billing dispute.",
+      "pilot": false
+    },
+    {
+      "id": "72d4de8d-eded-4f6f-8fd4-3f76c19db408",
+      "n": 18,
+      "subject": "Tool use response includes trailing comma in JSON args \u2014 breaks `JSON.parse()`",
+      "seed_category": "bug",
+      "gold_category": "bug_report",
+      "gold_route": "escalate",
+      "rationale": "Malformed tool-call JSON from the model; bug report.",
+      "pilot": false
+    },
+    {
+      "id": "b9c07f80-b10e-42e7-8bf2-c2ca71e5a83e",
+      "n": 19,
+      "subject": "Payment failed - card expired, now account suspended?",
+      "seed_category": "billing",
+      "gold_category": "billing",
+      "gold_route": "escalate",
+      "rationale": "Failed payment and suspended account; needs billing action.",
+      "pilot": false
+    },
+    {
+      "id": "83c7c3f3-d541-41f5-a594-72c4edf56e72",
+      "n": 20,
+      "subject": "Migration from claude-3-sonnet-20240229 to 3.5 - system prompt behavior change?",
+      "seed_category": "informational",
+      "gold_category": "feature_question",
+      "gold_route": "auto_resolve",
+      "rationale": "Structured-output prompting (prefill, tools) is documented.",
+      "pilot": false
+    },
+    {
+      "id": "bac528e4-8673-42f0-87bd-032db21605fc",
+      "n": 21,
+      "subject": "Python SDK: anthropic.NotFoundError: 404 on model \"claude-3-5-sonnet-latest\"",
+      "seed_category": "informational",
+      "gold_category": "technical_api_error",
+      "gold_route": "auto_resolve",
+      "rationale": "Model/alias availability and retirement are documented on the models and deprecations pages.",
+      "pilot": false
+    },
+    {
+      "id": "b82d3c23-b385-48de-9ec0-1e745e16c0b5",
+      "n": 22,
+      "subject": "Temperature 0 still producing non-deterministic outputs",
+      "seed_category": "informational",
+      "gold_category": "feature_question",
+      "gold_route": "auto_resolve",
+      "rationale": "Docs state temperature 0 is not fully deterministic.",
+      "pilot": false
+    },
+    {
+      "id": "d7fb75b8-b923-4e87-8ce9-084e3016caf6",
+      "n": 23,
+      "subject": "SDK retry behavior on 529 (overloaded) - exponential backoff?",
+      "seed_category": "informational",
+      "gold_category": "technical_api_error",
+      "gold_route": "auto_resolve",
+      "rationale": "SDK retry behaviour and 529 backoff guidance are documented.",
+      "pilot": false
+    },
+    {
+      "id": "aa329206-d5f4-46de-9fc6-f763d604ef4c",
+      "n": 24,
+      "subject": "Tool choice \"auto\" vs \"any\" vs specific tool - behavior differences",
+      "seed_category": "informational",
+      "gold_category": "feature_question",
+      "gold_route": "auto_resolve",
+      "rationale": "tool_choice auto/any/tool semantics are documented.",
+      "pilot": true
+    },
+    {
+      "id": "e4345519-99d7-4791-b81a-e330dd5554da",
+      "n": 25,
+      "subject": "Suspicious usage spike - possible key compromise or third-party abuse",
+      "seed_category": "security",
+      "gold_category": "security_abuse",
+      "gold_route": "escalate",
+      "rationale": "Suspected key compromise with foreign-IP usage.",
+      "pilot": false
+    },
+    {
+      "id": "cb266147-0233-422a-9496-6cdddd147114",
+      "n": 26,
+      "subject": "Message batches: webhook notification on completion?",
+      "seed_category": "informational",
+      "gold_category": "feature_question",
+      "gold_route": "auto_resolve",
+      "rationale": "Batches have no webhooks; results are available when processing ends. Documented.",
+      "pilot": false
+    },
+    {
+      "id": "c6724a0b-0bc8-4980-a29c-3ad76f8879bb",
+      "n": 27,
+      "subject": "Context window limit for claude-3-opus-20240229 vs sonnet",
+      "seed_category": "informational",
+      "gold_category": "technical_api_error",
+      "gold_route": "auto_resolve",
+      "rationale": "tiktoken is not Claude's tokenizer; use the token counting API. Documented.",
+      "pilot": false
+    },
+    {
+      "id": "f31b8faf-04b3-438a-a997-2cec9859564e",
+      "n": 28,
+      "subject": "Batch API - max requests per batch and rate limits",
+      "seed_category": "informational",
+      "gold_category": "feature_question",
+      "gold_route": "auto_resolve",
+      "rationale": "Batch size limits and the 50% discount on input and output are documented.",
+      "pilot": false
+    },
+    {
+      "id": "e451d936-5250-4c96-902d-df860e717e6b",
+      "n": 29,
+      "subject": "Security questionnaire + volume pricing for Claude 3 Opus / Sonnet mix",
+      "seed_category": "sales",
+      "gold_category": "sales_enterprise",
+      "gold_route": "escalate",
+      "rationale": "Security questionnaire, volume pricing, zero retention: enterprise sales.",
+      "pilot": true
+    },
+    {
+      "id": "596e4184-c8ed-4c41-b1a3-9fb367974ef8",
+      "n": 30,
+      "subject": "Model version pinning ignored \u2014 requested opus-20240229 but got 20240513 behavior",
+      "seed_category": "bug",
+      "gold_category": "bug_report",
+      "gold_route": "escalate",
+      "rationale": "Claims a pinned model version is not served; needs engineering.",
+      "pilot": false
+    },
+    {
+      "id": "90ef0bb3-5b07-4fa6-a86a-73acfeb9b5d6",
+      "n": 31,
+      "subject": "`max_tokens` limit not enforced \u2014 got 4097 tokens output when limit was 4096",
+      "seed_category": "bug",
+      "gold_category": "bug_report",
+      "gold_route": "escalate",
+      "rationale": "Off-by-one on max_tokens enforcement; bug report.",
+      "pilot": false
+    },
+    {
+      "id": "9c6569ee-ca93-45ef-8339-c5521996e07a",
+      "n": 32,
+      "subject": "Intermittent 502 from `/v1/messages` with cloudflare HTML body instead of JSON error",
+      "seed_category": "bug",
+      "gold_category": "bug_report",
+      "gold_route": "escalate",
+      "rationale": "Intermittent 502s with non-JSON bodies; infrastructure issue, not doc-answerable.",
+      "pilot": true
+    },
+    {
+      "id": "45aca0ec-9035-4eda-804f-94569cd3d273",
+      "n": 33,
+      "subject": "Enterprise pricing & rate limits for Claude 3.5 Sonnet rollout",
+      "seed_category": "sales",
+      "gold_category": "sales_enterprise",
+      "gold_route": "escalate",
+      "rationale": "Enterprise pricing, dedicated capacity, SLAs.",
+      "pilot": false
+    },
+    {
+      "id": "c5f69ac8-0dc7-4d0a-ac25-d1887d5742ce",
+      "n": 34,
+      "subject": "Beta headers not respected \u2014 `anthropic-beta: prompt-caching-2024-07-31` ignored",
+      "seed_category": "bug",
+      "gold_category": "technical_api_error",
+      "gold_route": "auto_resolve",
+      "rationale": "Prompt caching is GA and requires cache_control blocks and a minimum prefix length; documented. (Medium confidence: could also be filed as a bug.)",
+      "pilot": false
+    },
+    {
+      "id": "8e9210ba-6500-4f71-b74f-d05f1ff96a3a",
+      "n": 35,
+      "subject": "API key accidentally committed to public GitHub repo - need rotation ASAP",
+      "seed_category": "security",
+      "gold_category": "security_abuse",
+      "gold_route": "escalate",
+      "rationale": "API key committed to a public repo; wants anomaly audit.",
+      "pilot": false
+    },
+    {
+      "id": "379d4d1e-200c-4dc8-a60e-fbfea0feec70",
+      "n": 36,
+      "subject": "System prompts ignored? Or am I formatting them wrong - claude-3-sonnet",
+      "seed_category": "ambiguous",
+      "gold_category": "feature_question",
+      "gold_route": "auto_resolve",
+      "rationale": "System prompt usage and JSON-only output techniques are documented.",
+      "pilot": true
+    },
+    {
+      "id": "6760d2eb-2a88-4d9b-8a13-fed70f68dbfc",
+      "n": 37,
+      "subject": "Streaming chunks missing `delta` field intermittently (claude-3.5-sonnet)",
+      "seed_category": "bug",
+      "gold_category": "bug_report",
+      "gold_route": "escalate",
+      "rationale": "SSE chunks missing delta; streaming bug report.",
+      "pilot": false
+    },
+    {
+      "id": "1039df10-2be3-43b9-b85d-1cf86096c11f",
+      "n": 38,
+      "subject": "Python SDK `count_tokens` returns different count than actual usage in response",
+      "seed_category": "bug",
+      "gold_category": "feature_question",
+      "gold_route": "auto_resolve",
+      "rationale": "Docs state token counts are estimates and can differ slightly from billed usage.",
+      "pilot": true
+    },
+    {
+      "id": "cb3d8569-fe7c-483f-8ba7-c44b8dbb7c09",
+      "n": 39,
+      "subject": "Rate limit headers confusing / possible bug with batch API",
+      "seed_category": "ambiguous",
+      "gold_category": "technical_api_error",
+      "gold_route": "escalate",
+      "rationale": "Headers suggest a tier/provisioning mismatch on the account; needs account inspection.",
+      "pilot": false
+    },
+    {
+      "id": "a47c53f5-0443-473a-a1c5-236cb85a80a3",
+      "n": 40,
+      "subject": "Need to speak with sales \u2014 enterprise agreement for Claude 3.5 Sonnet",
+      "seed_category": "sales",
+      "gold_category": "sales_enterprise",
+      "gold_route": "escalate",
+      "rationale": "Enterprise agreement with HIPAA BAA.",
+      "pilot": false
+    }
+  ]
+}

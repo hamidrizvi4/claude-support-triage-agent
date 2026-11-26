@@ -11,8 +11,11 @@ import { TOOLS, searchDocs, checkStatus, checkPricing, lookupAccount } from "./t
 // Defaults to the free model per CLAUDE.md. Override with OPENROUTER_MODEL
 // (same pattern as scripts/generate-tickets.ts) for a paid run — e.g. a
 // portfolio-facing dataset on an Exacto-routed model for reliable tool calls.
-const MODEL = resolveModel();
+// The eval harness passes `model` per run instead.
 const MAX_TURNS = 8;
+// Was 2048: the paid rerun lost one ticket to a submit_resolution payload
+// (long draft + citations) cut off mid-JSON at the token limit.
+const MAX_TOKENS = 4096;
 
 const SYSTEM_PROMPT = `You are a support triage agent for Anthropic's Claude API developer support
 team. For every ticket: classify it, use \`search_docs\` to ground any factual
@@ -55,6 +58,45 @@ function getOpenRouterClient() {
   return new OpenAI({ apiKey, baseURL: "https://openrouter.ai/api/v1" });
 }
 
+export type ToolLogger = (ticketId: string, toolName: string, input: unknown, output: unknown) => Promise<void>;
+
+export type AgentOptions = {
+  /** OpenRouter model slug; defaults to resolveModel(). */
+  model?: string;
+  /** Sampling seed, passed through where the provider honours it. */
+  seed?: number;
+  /** Where tool calls are recorded; defaults to the tool_calls table. */
+  log?: ToolLogger;
+};
+
+export type AgentUsage = { promptTokens: number; completionTokens: number; cost: number };
+
+/** Everything a run produced, beyond the resolution itself. */
+export type AgentRun = {
+  resolution: Resolution;
+  /** Every cosine similarity search_docs / check_pricing returned this run. */
+  similarities: number[];
+  usage: AgentUsage;
+  turns: number;
+  tools: string[];
+};
+
+/** Thrown when a run ends without a usable resolution; still carries what the run cost. */
+export class AgentRunError extends Error {
+  constructor(
+    message: string,
+    readonly partial: Omit<AgentRun, "resolution">
+  ) {
+    super(message);
+  }
+}
+
+function similaritiesFrom(output: unknown): number[] {
+  const results = (output as { results?: { similarity?: unknown }[] } | null)?.results;
+  if (!Array.isArray(results)) return [];
+  return results.map((r) => (r?.similarity == null ? NaN : Number(r.similarity))).filter((n) => Number.isFinite(n));
+}
+
 async function logToolCall(ticketId: string, toolName: string, input: unknown, output: unknown) {
   const supabase = getSupabaseAdmin();
   const { error } = await supabase.from("tool_calls").insert({ ticket_id: ticketId, tool_name: toolName, input, output });
@@ -69,7 +111,18 @@ const HANDLERS: Record<string, (input: Record<string, unknown>) => Promise<unkno
 };
 
 export async function runAgent(ticket: Ticket): Promise<Resolution> {
+  return (await runAgentDetailed(ticket)).resolution;
+}
+
+export async function runAgentDetailed(ticket: Ticket, opts: AgentOptions = {}): Promise<AgentRun> {
   const openai = getOpenRouterClient();
+  const model = opts.model ?? resolveModel();
+  const log = opts.log ?? logToolCall;
+  const similarities: number[] = [];
+  const tools: string[] = [];
+  const usage: AgentUsage = { promptTokens: 0, completionTokens: 0, cost: 0 };
+  let turns = 0;
+  const fail = (message: string) => new AgentRunError(message, { similarities, usage, turns, tools });
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: SYSTEM_PROMPT },
     {
@@ -82,9 +135,15 @@ export async function runAgent(ticket: Ticket): Promise<Resolution> {
 
   for (let turn = 0; turn < MAX_TURNS; turn++) {
     const isLastTurn = turn === MAX_TURNS - 1;
-    const response = await openai.chat.completions.create({
-      model: MODEL,
-      max_tokens: 2048,
+    turns = turn + 1;
+    let response: OpenAI.Chat.Completions.ChatCompletion;
+    try {
+      response = await openai.chat.completions.create({
+      model,
+      max_tokens: MAX_TOKENS,
+      ...(opts.seed !== undefined ? { seed: opts.seed } : {}),
+      // OpenRouter extension: report the request's actual cost in `usage`.
+      ...({ usage: { include: true } } as object),
       tools: TOOLS,
       // Force a resolution on the final turn instead of letting the loop
       // exhaust the budget and throw. NOTE: OpenRouter's Auto Exacto routing
@@ -95,10 +154,18 @@ export async function runAgent(ticket: Ticket): Promise<Resolution> {
       // Expect a non-trivial rate of forced-tool-call misses on this free model.
       ...(isLastTurn ? { tool_choice: { type: "function" as const, function: { name: "submit_resolution" } } } : {}),
       messages,
-    });
+      });
+    } catch (err) {
+      throw fail(`upstream error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    const u = response.usage as (OpenAI.CompletionUsage & { cost?: number }) | undefined;
+    usage.promptTokens += u?.prompt_tokens ?? 0;
+    usage.completionTokens += u?.completion_tokens ?? 0;
+    usage.cost += Number(u?.cost) || 0;
 
     const message = response.choices?.[0]?.message;
-    if (!message) throw new Error(`OpenRouter response had no choices: ${JSON.stringify(response)}`);
+    if (!message) throw fail(`OpenRouter response had no choices: ${JSON.stringify(response).slice(0, 300)}`);
     messages.push({ role: "assistant", content: message.content, tool_calls: message.tool_calls });
 
     // TOOLS only registers `type: "function"` entries, so every call back is one.
@@ -107,30 +174,39 @@ export async function runAgent(ticket: Ticket): Promise<Resolution> {
     );
     const submit = toolCalls.find((tc) => tc.function.name === "submit_resolution");
     if (submit) {
-      const args = JSON.parse(submit.function.arguments) as Resolution;
+      tools.push("submit_resolution");
+      let args: Resolution;
+      try {
+        args = JSON.parse(submit.function.arguments) as Resolution;
+      } catch (err) {
+        throw fail(`submit_resolution arguments were not valid JSON: ${err instanceof Error ? err.message : String(err)}`);
+      }
       args.retrieval_score = coerceScore(args.retrieval_score);
       args.self_certainty = coerceScore(args.self_certainty);
-      await logToolCall(ticket.id, "submit_resolution", args, null);
-      return args;
+      await log(ticket.id, "submit_resolution", args, null);
+      return { resolution: args, similarities, usage, turns, tools };
     }
 
     if (toolCalls.length === 0) break;
 
     for (const call of toolCalls) {
-      const input = JSON.parse(call.function.arguments) as Record<string, unknown>;
-      const handler = HANDLERS[call.function.name];
+      tools.push(call.function.name);
+      let input: Record<string, unknown> = {};
       try {
+        input = JSON.parse(call.function.arguments) as Record<string, unknown>;
+        const handler = HANDLERS[call.function.name];
         if (!handler) throw new Error(`unknown tool ${call.function.name}`);
         const output = await handler(input);
-        await logToolCall(ticket.id, call.function.name, input, output);
+        similarities.push(...similaritiesFrom(output));
+        await log(ticket.id, call.function.name, input, output);
         messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(output) });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        await logToolCall(ticket.id, call.function.name, input, { error: message });
+        await log(ticket.id, call.function.name, input, { error: message });
         messages.push({ role: "tool", tool_call_id: call.id, content: message });
       }
     }
   }
 
-  throw new Error(`agent did not call submit_resolution within ${MAX_TURNS} turns`);
+  throw fail(`agent did not call submit_resolution within ${MAX_TURNS} turns`);
 }
