@@ -62,15 +62,38 @@ type Gold = { set: "core" | "hard"; gold_category: string; gold_route: string; k
 
 type Variant = { key: string; label: string; cosine: boolean; net: boolean };
 const VARIANTS: Variant[] = [
-  { key: "before", label: "Model-reported retrieval, no safety net (before)", cosine: false, net: false },
-  { key: "net_only", label: "Model-reported retrieval + safety net", cosine: false, net: true },
-  { key: "cosine_only", label: "Cosine retrieval, no safety net", cosine: true, net: false },
-  { key: "after", label: "Cosine retrieval + safety net (after)", cosine: true, net: true },
+  { key: "before", label: "Original routing (model-reported retrieval)", cosine: false, net: false },
+  { key: "net_only", label: "Original + safety net — shipped", cosine: false, net: true },
+  { key: "cosine_only", label: "Cosine retrieval instead — rejected", cosine: true, net: false },
+  { key: "after", label: "Cosine retrieval + safety net — rejected", cosine: true, net: true },
 ];
+/** The arm production runs, chosen by these results (see docs/EVALUATION.md). */
+const SHIPPED = "net_only";
+const COSINE = "after";
+const SENSITIVE_NET = new Set(["billing", "security_abuse", "sales_enterprise"]);
+
+/**
+ * Provider-side failures (429s, 5xx, network) say nothing about the agent, so
+ * they are set aside like production's rate_limited rows, counted, and can be
+ * re-run with `eval:run -- --retry-infra`. A model that answers without
+ * calling submit_resolution is NOT infrastructure: that stays "incomplete".
+ */
+const SEARCH_INFRA = /^(search_docs|check_pricing): .*(statement timeout|fetch failed|ECONN|socket|terminated|embeddings error (429|5\d\d))/i;
+/** Recomputed from the raw error text, so the rule is the same for every record. */
+export const isInfra = (r: RunRecord) =>
+  (!r.completed && /^upstream error/.test(r.error ?? "")) || (r.tool_errors ?? []).some((e) => SEARCH_INFRA.test(e));
+
+/**
+ * One record per (model, ticket, seed): the FIRST valid (non-infrastructure)
+ * record wins, so a retry can only replace a genuine infrastructure failure,
+ * never re-roll a run the agent actually got wrong.
+ */
+let infraRecordsSeen = 0;
 
 function readRuns(prefixPilot: boolean): RunRecord[] {
   if (!fs.existsSync(RUNS)) return [];
-  return fs
+  const latest = new Map<string, RunRecord>();
+  const lines = fs
     .readdirSync(RUNS)
     .filter((f) => f.endsWith(".jsonl") && f.startsWith("pilot_") === prefixPilot)
     .flatMap((f) =>
@@ -80,6 +103,13 @@ function readRuns(prefixPilot: boolean): RunRecord[] {
         .filter(Boolean)
         .map((l) => JSON.parse(l) as RunRecord)
     );
+  if (!prefixPilot) infraRecordsSeen = lines.filter(isInfra).length;
+  for (const r of lines) {
+    const key = `${r.model}#${r.ticket_id}#${r.seed}`;
+    const prev = latest.get(key);
+    if (!prev || (isInfra(prev) && !isInfra(r))) latest.set(key, r);
+  }
+  return [...latest.values()];
 }
 
 function retrievalFor(r: RunRecord, cosine: boolean): number {
@@ -260,8 +290,8 @@ async function pilot() {
 
 type SignalKey = "blend_model" | "blend_cosine" | "cosine" | "certainty" | "model_retrieval";
 const SIGNALS: { key: SignalKey; label: string; fn: (r: RunRecord) => number }[] = [
-  { key: "blend_cosine", label: "0.6·cosine + 0.4·certainty (new)", fn: (r) => computeConfidence(cosineRetrievalScore(r.similarities), r.self_certainty ?? 0) },
-  { key: "blend_model", label: "0.6·model-reported + 0.4·certainty (old)", fn: (r) => computeConfidence(r.model_retrieval ?? 0, r.self_certainty ?? 0) },
+  { key: "blend_cosine", label: "0.6·cosine + 0.4·certainty (rejected)", fn: (r) => computeConfidence(cosineRetrievalScore(r.similarities), r.self_certainty ?? 0) },
+  { key: "blend_model", label: "0.6·model-reported + 0.4·certainty (shipped)", fn: (r) => computeConfidence(r.model_retrieval ?? 0, r.self_certainty ?? 0) },
   { key: "cosine", label: "Cosine similarity alone", fn: (r) => cosineRetrievalScore(r.similarities) },
   { key: "certainty", label: "Self-certainty alone", fn: (r) => r.self_certainty ?? 0 },
   { key: "model_retrieval", label: "Model-reported retrieval alone", fn: (r) => r.model_retrieval ?? 0 },
@@ -352,13 +382,19 @@ async function main() {
 
   const gold = goldById() as Map<string, Gold>;
   const texts = await loadTexts(gold);
-  const all = readRuns(false);
+  const everything = readRuns(false);
+  // Infrastructure failures seen in the raw files (some were re-run and replaced).
+  const infraExcluded = infraRecordsSeen;
+  const infraUnreplaced = everything.filter(isInfra).length;
+  const all = everything.filter((r) => !isInfra(r));
   if (all.length === 0) throw new Error("no runs in evals/runs/*.jsonl — run `npm run eval:run` first");
 
   const models = [...new Set(all.map((r) => r.model))].sort();
   const seeds = [...new Set(all.map((r) => r.seed))].sort();
-  const exactoModel = models.find((m) => m.endsWith(":exacto")) ?? models[0];
-  const primary = exactoModel; // the configuration the report leads with
+  // The report leads with the model the labeled pilot picked (model-pick.json).
+  const pickFile = path.join(ROOT, "evals", "results", "model-pick.json");
+  const picked = fs.existsSync(pickFile) ? (JSON.parse(fs.readFileSync(pickFile, "utf8")).picked as string) : null;
+  const primary = picked && models.includes(picked) ? picked : models[0];
 
   // Unlabeled calibration of the cosine band: best-match similarity per run.
   const bestSims = all.filter((r) => r.similarities.length).map((r) => Math.max(...r.similarities));
@@ -378,6 +414,9 @@ async function main() {
     primary,
     dataset,
     cosine: cal,
+    shipped: SHIPPED,
+    infraExcluded,
+    infraUnreplaced,
   };
 
   const byModel = groupBy(all, (r) => r.model);
@@ -437,17 +476,25 @@ async function main() {
   out.perModel = perModel;
 
   // Same-model comparison: base routing vs :exacto, pooled over seeds, core set.
-  const baseModel = models.find((m) => !m.endsWith(":exacto"));
-  let exacto: { base: ExactoSide; exacto: ExactoSide; completionP: number; escalationRecallP: number } | null = null;
+  // Only seeds both configs completed are compared, so the pair stays matched.
+  const baseModel = models.find((m) => !m.endsWith(":exacto") && models.includes(`${m}:exacto`));
+  let exacto: { seeds: number[]; base: ExactoSide; exacto: ExactoSide; completionP: number; escalationRecallP: number } | null = null;
   if (baseModel && models.includes(`${baseModel}:exacto`)) {
     const after = VARIANTS.find((v) => v.key === "after")!;
+    // A seed counts only if both configs finished every core ticket on it.
+    const fullSeeds = (m: string) =>
+      new Set(
+        seeds.filter((s) => byModel.get(m)!.filter((r) => r.seed === s && gold.get(r.ticket_id)?.set === "core").length === dataset.core)
+      );
+    const shared = [...fullSeeds(baseModel)].filter((s) => fullSeeds(`${baseModel}:exacto`).has(s));
     const cmp = [baseModel, `${baseModel}:exacto`].map((m) => {
-      const rs = byModel.get(m)!.filter((r) => gold.get(r.ticket_id)?.set === "core");
+      const rs = byModel.get(m)!.filter((r) => gold.get(r.ticket_id)?.set === "core" && shared.includes(r.seed));
       const s = score(rs, after, gold, texts);
       return { model: m, runs: rs.length, completed: s.completed, counts: s.counts, cost: rs.reduce((a, r) => a + r.cost, 0) / rs.length, latencyS: rs.reduce((a, r) => a + r.latency_ms, 0) / rs.length / 1000 };
     });
     const [a, b] = cmp;
     exacto = {
+      seeds: shared,
       base: { ...a, completion: r3(a.completed / a.runs), escalationRecall: r3(escalationRecall(a.counts)) },
       exacto: { ...b, completion: r3(b.completed / b.runs), escalationRecall: r3(escalationRecall(b.counts)) },
       completionP: fisherExact(a.completed, a.runs - a.completed, b.completed, b.runs - b.completed),
@@ -456,9 +503,7 @@ async function main() {
     out.exacto = exacto;
   }
 
-  /* ── write summary.json ── */
   fs.mkdirSync(path.join(ROOT, "evals", "results"), { recursive: true });
-  fs.writeFileSync(path.join(ROOT, "evals", "results", "summary.json"), JSON.stringify(out, null, 2) + "\n");
 
   /* ── markdown report ── */
   const P = perModel[primary].core!;
@@ -482,6 +527,73 @@ async function main() {
   md.push(`Gold labels: [\`evals/labels.json\`](../evals/labels.json) (labeling policy inside) and [\`evals/hard-cases.json\`](../evals/hard-cases.json). ` +
     `Incomplete runs (no valid \`submit_resolution\`) count as escalated, because that is what happens to them in production.`, ``);
 
+  const rc = P.riskCoverage!;
+  // Safety net, judged on the ticket text alone (no model involved).
+  const netText = (() => {
+    let fires = 0;
+    let sensitive = 0;
+    let caught = 0;
+    let falseHits = 0;
+    for (const [id, g] of gold) {
+      const hit = safetyNet(texts.get(id) ?? "");
+      const sens = SENSITIVE_NET.has(g.gold_category);
+      if (sens) sensitive++;
+      if (hit) {
+        fires++;
+        if (sens) caught++;
+        else falseHits++;
+      }
+    }
+    return { tickets: gold.size, fires, sensitive, caught, falseHits };
+  })();
+  const cosineCore = v(P, COSINE);
+  const beforeCore = v(P, "before");
+  const decisionsChanged = (key: string, sets: (SetOut | undefined)[]) =>
+    sets.reduce((acc, st) => acc + (st ? v(st, key).netCatches.mean * seeds.length : 0), 0);
+  const findings = {
+    cosine: {
+      recallBefore: beforeCore.escalationRecall.mean,
+      recallCosine: cosineCore.escalationRecall.mean,
+      unsafeBefore: beforeCore.unsafeAutoResolves.mean,
+      unsafeCosine: cosineCore.unsafeAutoResolves.mean,
+      aurcModel: rc.signals.find((x) => x.key === "blend_model")!.aurc,
+      aurcCosine: rc.signals.find((x) => x.key === "blend_cosine")!.aurc,
+      aurcCosineAlone: rc.signals.find((x) => x.key === "cosine")!.aurc,
+      baseRisk: rc.baseRisk,
+    },
+    net: { ...netText, decisionsChanged: Math.round(decisionsChanged(SHIPPED, [P, H])) },
+    bug: (() => {
+      const i = P.categoryConfusion.labels.indexOf("bug_report");
+      const row = P.categoryConfusion.matrix[i];
+      return { total: row.reduce((x, y) => x + y, 0), labeledBug: row[i] };
+    })(),
+  };
+  out.findings = findings;
+  fs.writeFileSync(path.join(ROOT, "evals", "results", "summary.json"), JSON.stringify(out, null, 2) + "\n");
+
+  md.push(`## Findings`, ``);
+  const findingLines = [
+    `- **Cosine similarity is the wrong retrieval signal; rejected.** Swapping the model's self-reported retrieval score for the search's own cosine similarity ` +
+      `lowered must-escalate recall from ${pct(findings.cosine.recallBefore)} to ${pct(findings.cosine.recallCosine)} and raised unsafe auto-resolves from ` +
+      `${findings.cosine.unsafeBefore.toFixed(1)} to ${findings.cosine.unsafeCosine.toFixed(1)} per run. As a ranking signal, cosine alone (AURC ${findings.cosine.aurcCosineAlone.toFixed(3)}) ` +
+      `does worse than no ranking at all (${findings.cosine.baseRisk.toFixed(3)}). Similarity measures whether a ticket is on-topic for the docs, not whether the docs can resolve it. ` +
+      `Production keeps the model's score.`,
+    `- **The safety net works, but this model didn't need it.** On the ticket text alone it fires on ${netText.fires}/${netText.tickets} tickets, ` +
+      `catches ${netText.caught}/${netText.sensitive} gold billing/security/sales tickets and makes ${netText.falseHits} false hits. It changed ` +
+      `${findings.net.decisionsChanged} routing decisions, because the model had already labeled every one of those tickets correctly. Shipped as a free backstop ` +
+      `for a model that mislabels; its misses are the deliberately disguised hard cases.`,
+    `- **The "bug reports always escalate" rule barely fires.** Only ${findings.bug.labeledBug} of ${findings.bug.total} bug-report runs were labeled ` +
+      `\`bug_report\`; most were filed as \`technical_api_error\` and reached a human only through low confidence. Category rules are only as good as the classifier.`,
+    ...(exacto
+      ? [
+          `- **Exacto routing helps the same model finish.** On \`${exacto.base.model}\`, completion went from ${pct(exacto.base.completion)} to ` +
+            `${pct(exacto.exacto.completion)} (Fisher p = ${exacto.completionP.toFixed(3)}) at ${(exacto.base.cost / exacto.exacto.cost).toFixed(1)}× lower cost per ticket; ` +
+            `the must-escalate recall difference is not significant (p = ${exacto.escalationRecallP.toFixed(2)}).`,
+        ]
+      : []),
+  ];
+  md.push(...findingLines, ``);
+
   md.push(`## Results — ${primary}, original ${dataset.core} tickets`, ``);
   md.push(`| Routing | Must-escalate recall | Unsafe auto-resolves / run | Auto-resolve precision | Coverage |`);
   md.push(`|---|---:|---:|---:|---:|`);
@@ -491,7 +603,7 @@ async function main() {
   md.push(``, `Completion rate (valid \`submit_resolution\`): ${fmt(P.completion)}. Category accuracy ${pct(P.categoryAccuracy)}, macro-F1 ${P.macroF1.toFixed(3)} (pooled over seeds, completed runs).`, ``);
 
   md.push(`### Routing confusion (pooled over ${seeds.length} seeds)`, ``);
-  for (const key of ["before", "after"]) {
+  for (const key of [SHIPPED, COSINE]) {
     const c = v(P, key).pooled as RouteCounts;
     md.push(`**${v(P, key).label}**`, ``);
     md.push(`| gold ↓ / routed → | escalated | auto-resolved |`, `|---|---:|---:|`);
@@ -502,7 +614,6 @@ async function main() {
   md.push(mdMatrix(P.categoryConfusion, "gold"), ``);
 
   md.push(`## Risk-coverage: which confidence signal ranks tickets best?`, ``);
-  const rc = P.riskCoverage!;
   md.push(
     `Among the ${rc.candidates} completed runs a threshold could auto-resolve (not already escalated by the category rule or safety net), ` +
       `tickets are sorted by each signal and auto-resolved from the top down. Lower AURC = the signal puts the tickets that need a human last. ` +
@@ -519,6 +630,11 @@ async function main() {
   if (exacto) {
     const e = exacto;
     md.push(`## Same model, with and without Exacto routing`, ``);
+    md.push(
+      `The headline model has a single provider, so Exacto can't change anything for it. This check uses \`${e.base.model}\`, ` +
+        `which is served by many providers of varying quality, on the ${dataset.core} labeled tickets × seeds ${e.seeds.join(", ")}.`,
+      ``
+    );
     md.push(`| Config | Completion | Must-escalate recall | $ / ticket | Latency |`, `|---|---:|---:|---:|---:|`);
     for (const x of [e.base, e.exacto]) md.push(`| \`${x.model}\` | ${pct(x.completion)} | ${pct(x.escalationRecall)} | $${x.cost.toFixed(5)} | ${x.latencyS.toFixed(1)}s |`);
     md.push(``, `Fisher exact (pooled runs): completion p = ${e.completionP.toFixed(3)}, must-escalate recall p = ${e.escalationRecallP.toFixed(3)}. ` +
@@ -539,6 +655,10 @@ async function main() {
     `- Pooled counts treat repeated runs of the same ticket as separate trials; they are not independent, so pooled intervals are optimistic.`,
     `- Labels were made by one labeler (Claude) against a written policy; ambiguous calls are noted per ticket in the label files.`,
     `- Seeds are passed through but not every provider honours them; the runs are best read as ${seeds.length} independent samples.`,
+    `- ${infraExcluded} run(s) failed on provider infrastructure (429/5xx/network, or a doc search that errored); ${infraExcluded - infraUnreplaced} were re-run and ${infraUnreplaced} remain excluded, never counted against the agent. A retry only ever replaces a record that was itself an infrastructure failure.`,
+    `- Doc search in the eval runs against an in-memory copy of the same index (same stored vectors, same exact cosine top-k as \`match_doc_chunks\`), because the live database's exact scan timed out under load. Spot-checked against the live RPC: identical top-5.`,
+    `- \`check_status\` (Anthropic's live status page) was unreachable from the sandbox the eval ran in, so the agent saw a tool error on every status check, identically across configurations. Absolute certainty on error-type tickets may be slightly lower than in production; comparisons between configurations are unaffected.`,
+    `- The model was chosen from a 12-ticket, single-seed pilot run before the search fix; a few pilot runs had degraded search. The choice was forced by budget either way: only one candidate's full run fit the $1 budget.`,
     ``
   );
   md.push(`Total eval spend: $${models.reduce((a, m) => a + (perModel[m].core?.cost.total ?? 0) + (perModel[m].hard?.cost.total ?? 0), 0).toFixed(3)}.`, ``);
@@ -548,31 +668,35 @@ async function main() {
   fs.writeFileSync(path.join(ROOT, "docs", "eval", "risk-coverage.svg"), rcSvg(rc));
 
   /* ── headline table in the case study and README, between eval markers ── */
-  const b = v(P, "before");
-  const a = v(P, "after");
   const headline = (reportLink: string) =>
     [
       "<!-- eval:start -->",
-      `| ${primary}, ${dataset.core} labeled tickets × ${seeds.length} seeds | Before | After |`,
-      `|---|---:|---:|`,
-      `| Must-escalate recall | ${fmt(b.escalationRecall)} | ${fmt(a.escalationRecall)} |`,
-      `| Unsafe auto-resolves per run | ${fmt(b.unsafeAutoResolves, false)} | ${fmt(a.unsafeAutoResolves, false)} |`,
-      `| Auto-resolve precision | ${fmt(b.autoResolvePrecision)} | ${fmt(a.autoResolvePrecision)} |`,
-      `| Coverage (share auto-resolved) | ${fmt(b.coverage)} | ${fmt(a.coverage)} |`,
+      `| \`${primary}\`, ${dataset.core} labeled tickets × ${seeds.length} seeds | Must-escalate recall | Unsafe auto-resolves / run | Auto-resolve precision | Coverage |`,
+      `|---|---:|---:|---:|---:|`,
+      ...P.variants.map(
+        (x) =>
+          `| ${x.key === SHIPPED ? `**${x.label}**` : x.label} | ${fmt(x.escalationRecall)} | ${fmt(x.unsafeAutoResolves, false)} | ${fmt(x.autoResolvePrecision)} | ${fmt(x.coverage)} |`
+      ),
       ``,
-      `*Before: model-reported retrieval score, no safety net. After: cosine retrieval + safety net. Mean over seeds, min–max in parentheses. Full report: [EVALUATION.md](${reportLink}).*`,
+      `*Mean over seeds, min–max in parentheses. Safety net on the ticket text alone: fires on ${netText.fires}/${netText.tickets} tickets, ` +
+        `catches ${netText.caught}/${netText.sensitive} billing/security/sales tickets, ${netText.falseHits} false hits. Full report: [EVALUATION.md](${reportLink}).*`,
       "<!-- eval:end -->",
     ].join("\n");
+  const between = (text: string, start: string, end: string, body: string) => {
+    const i = text.indexOf(start);
+    const j = text.indexOf(end);
+    return i < 0 || j < 0 ? text : text.slice(0, i) + start + "\n" + body + "\n" + end + text.slice(j + end.length);
+  };
   for (const [file, link] of [
     [path.join(ROOT, "docs", "CASE_STUDY.md"), "EVALUATION.md"],
     [path.join(ROOT, "README.md"), "docs/EVALUATION.md"],
   ]) {
     if (!fs.existsSync(file)) continue;
-    const text = fs.readFileSync(file, "utf8");
-    const i = text.indexOf("<!-- eval:start -->");
-    const j = text.indexOf("<!-- eval:end -->");
-    if (i < 0 || j < 0) continue;
-    fs.writeFileSync(file, text.slice(0, i) + headline(link) + text.slice(j + "<!-- eval:end -->".length));
+    let text = fs.readFileSync(file, "utf8");
+    const table = headline(link).split("\n").slice(1, -1).join("\n");
+    text = between(text, "<!-- eval:start -->", "<!-- eval:end -->", table);
+    text = between(text, "<!-- eval-notes:start -->", "<!-- eval-notes:end -->", findingLines.join("\n"));
+    fs.writeFileSync(file, text);
   }
 
   console.log(md.join("\n"));

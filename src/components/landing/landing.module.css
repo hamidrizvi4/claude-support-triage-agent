@@ -1132,6 +1132,7 @@
 .payloadHead {
   display: flex;
   justify-content: space-between;
+  gap: var(--space-4);
   padding: var(--space-3) var(--space-6);
   border-bottom: 1px solid var(--border);
   font-family: var(--font-mono);
@@ -2271,4 +2272,74 @@
   .routeGrid {
     grid-template-columns: 96px minmax(0, 1fr) minmax(0, 1fr);
   }
+}
+
+.findings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-top: var(--space-4);
+}
+
+.findings li {
+  padding-left: var(--space-4);
+  border-left: 2px solid var(--border-strong);
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.findings b {
+  display: block;
+  margin-bottom: 2px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.findings code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--surface-hover);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--text-primary);
+}
+
+.arms {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3) var(--space-6) var(--space-4);
+}
+
+.arms li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 64px 40px;
+  gap: var(--space-3);
+  align-items: center;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 13.5px;
+  color: var(--text-secondary);
+}
+
+.arms li:last-child {
+  border-bottom: none;
+}
+
+.arms b {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.armShipped span {
+  font-weight: 500;
+  color: var(--resolve);
+}
+
+.armRejected span {
+  text-decoration: line-through;
+  text-decoration-color: var(--escalate);
 }

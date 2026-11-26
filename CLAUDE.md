@@ -21,7 +21,9 @@ from a real user, forum post, or support thread.
 - Supabase (Postgres + pgvector + Auth) — data + vector store
 - OpenRouter — everything model-related, no other LLM provider in this repo:
   - Orchestration/tool-calling: `nvidia/nemotron-3-ultra-550b-a55b:free` (chat completions)
-  - Embeddings: `nvidia/nemotron-3-embed-1b:free` (dedicated `/embeddings` endpoint)
+  - Embeddings: `qwen/qwen3-embedding-8b` at `dimensions: 2048` (dedicated `/embeddings`
+    endpoint). Was `nvidia/nemotron-3-embed-1b:free` until OpenRouter retired it on
+    2026-11-23 (HTTP 410); see "Evaluation" below.
   - Synthetic ticket generation: any free chat model
 - Deploy target: Vercel + Supabase
 
@@ -35,10 +37,11 @@ Do not add `@anthropic-ai/sdk` or an OpenAI account key anywhere in this repo.
   Free/open models are less reliable than Claude at forced structured tool calls —
   check OpenRouter's provider-routing docs for the highest-tool-calling-accuracy
   routing option (their "Exacto" mode) and enable it for this model.
-- Embedding calls: `POST /embeddings`, `model: "nvidia/nemotron-3-embed-1b:free"`.
-  Fixed output dimension of **2048** — the API rejects other `dimensions` values,
-  so don't try to slim it down to match the old 1536 schema. Schema below is
-  already updated to `vector(2048)`.
+- Embedding calls: `POST /embeddings`, `model: "qwen/qwen3-embedding-8b"`,
+  `dimensions: 2048` (Matryoshka truncation, matches `vector(2048)`). Changing the
+  embedding model means re-embedding the whole index (`npm run reembed-docs`) —
+  query and document vectors must come from the same model, and a swap without
+  this leaves search silently useless.
 
 ## Schema (Supabase / Postgres)
 ```sql
@@ -150,6 +153,35 @@ protocol (not Anthropic's single-message content-blocks pattern).
 No prompt-caching optimization for now — `cache_control` breakpoints were an
 Anthropic-specific feature and there's no equivalent guarantee on the free
 OpenRouter model. Not a real issue at $0/token; revisit only if latency matters.
+
+## Evaluation (labeled, multi-seed) — see docs/EVALUATION.md
+- `evals/labels.json`: gold category + gold route for all 40 tickets, with the
+  labeling policy. `evals/hard-cases.json`: 12 author-written stress cases,
+  always reported separately (same author as the safety net).
+- `npm run eval:run` never writes to Supabase (no-op tool logger); outputs raw
+  per-run JSONL to `evals/runs/`. `npm run eval:report` recomputes every routing
+  variant offline from those raw outputs and writes `evals/results/summary.json`
+  (the intro page's evaluation section renders only from it), `docs/EVALUATION.md`,
+  and the tables between `<!-- eval:start -->` markers in the README and case study.
+  Never hand-edit those numbers; re-run the report.
+- Headline metric: **must-escalate recall** (of gold "needs a human" tickets, the
+  share routed to one; incomplete runs count as escalated). Precision of
+  auto-resolves and coverage are the cost side.
+- **Shipped routing = original formula + safety net.** `routeTicket()` = model's
+  category rule → `safetyNet()` on the ticket text → confidence threshold. The net
+  covers billing/security/sales only (bug language is too generic for keywords)
+  and can only push a ticket toward a human.
+- **Rejected:** `cosineRetrievalScore()` (search's own cosine similarity instead of
+  the model's `retrieval_score`) routed worse — lower must-escalate recall, worse
+  risk-coverage. It stays in `routing.ts` only because the eval scores it as an
+  arm. Don't wire it back into `run-triage` without new evidence.
+- The eval searches an in-memory copy of the index (`scripts/eval/localIndex.ts`,
+  cache in `evals/.cache/`, gitignored) because the live exact scan times out
+  under load. `supabase/migrations/0006_halfvec_hnsw_index.sql` fixes that for
+  production but had NOT been applied when written — check before assuming.
+- Known agent gap the eval surfaced: if the model stops calling tools before the
+  last turn, the loop ends without forcing `submit_resolution` (most "incomplete"
+  runs). Forcing it on the next turn instead would be the cheap fix.
 
 ## Confidence & routing formula
 ```

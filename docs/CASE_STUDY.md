@@ -200,6 +200,86 @@ Both rows stay in the write-up. The free-tier result is the actual finding
 about what "free" costs; the paid run is the clean dataset the rest of the
 product is built to demonstrate against.
 
+## Evaluation: hand labels, three seeds, and a safety net
+
+The economics experiment answered "how often does it finish?" It couldn't
+answer "when it routes a ticket, is the route *right*?", because nothing had a
+correct answer to compare against. Fixing that meant four changes, each aimed
+at a weakness a reviewer would find:
+
+- **Gold labels.** All 40 tickets labeled with the correct category and the
+  correct route under a written policy: escalate if the category is billing,
+  security, sales or a bug report, *or* if a complete answer needs something the
+  public docs can't give (an account investigation, an engineering fix, a
+  behavior that contradicts the docs). Plus 12 hard cases written to break the
+  router, reported separately because I also wrote the safety net they test.
+- **A retrieval score the model can't grade itself — as a hypothesis.**
+  `retrieval_score` is the model's own opinion of its search results, so "two
+  confidence signals" was really two self-reports. The candidate replacement:
+  the best cosine similarity the vector search actually returned, rescaled onto
+  0–1 with a band set from the unlabeled similarity distribution, never from the
+  labels. The evaluation decided whether it shipped.
+- **A category safety net.** The always-escalate rule trusted the model's
+  category label: a refund request filed as `feature_question` could auto-resolve
+  on confidence alone. A deterministic keyword net re-reads the ticket text for
+  billing, security and sales events, and can only push a ticket *toward* a
+  human.
+- **Repeat runs and a same-model comparison.** Every configuration ran 3 times
+  per ticket, so the numbers carry seed-to-seed ranges. Exacto routing was tested
+  on one model with and without it, so its effect isn't confounded with a model
+  swap the way the earlier free-vs-paid run was.
+
+Before any of that could run, the doc index turned out to be dead: OpenRouter
+retired the embedding model it was built on three days earlier, so every
+`search_docs` call was failing with HTTP 410, in production too. The free
+successor model was too rate-limited and unstable to rebuild 13,000 chunks, so
+the index was re-embedded on a cheap paid model (about $0.07 for the corpus)
+that fits the existing `vector(2048)` column. Free-tier dependencies have a
+failure mode beyond reliability: they can disappear.
+
+The model itself was picked by a labeled pilot of four cheap, recent
+tool-calling models, under a hard spending limit: the best router among the
+models whose full run fit a $1 budget. All four routing arms (original, +
+safety net, cosine retrieval, cosine + net) were then scored on the *same*
+agent runs, so the only thing that differs between rows is the routing.
+
+A second infrastructure problem surfaced mid-run and was worth more than the
+numbers it nearly corrupted. Under concurrent load, the database's exact vector
+scan hit Postgres' statement timeout, and the agent quietly received an error
+string instead of search results; half the first batch of runs measured a
+broken search, not the agent. Those runs were discarded rather than scored.
+The eval now records every tool error, treats a failed search as an
+infrastructure failure (excluded and retryable, never scored), keeps the
+*first* valid record per ticket so a retry can never re-roll a run the agent
+actually got wrong, and searches an in-memory copy of the same stored vectors
+(spot-checked identical to the live database). A migration to an indexable
+`halfvec` column is in the repo for production.
+
+<!-- eval:start -->
+| `qwen/qwen3.7-flash`, 40 labeled tickets × 3 seeds | Must-escalate recall | Unsafe auto-resolves / run | Auto-resolve precision | Coverage |
+|---|---:|---:|---:|---:|
+| Original routing (model-reported retrieval) | 93.1% (87.5%–95.8%) | 1.7 (1–3) | 84.7% (75.0%–91.7%) | 26.7% (20.0%–30.0%) |
+| **Original + safety net — shipped** | 93.1% (87.5%–95.8%) | 1.7 (1–3) | 84.7% (75.0%–91.7%) | 26.7% (20.0%–30.0%) |
+| Cosine retrieval instead — rejected | 86.1% (75.0%–95.8%) | 3.3 (1–6) | 71.7% (50.0%–90.0%) | 28.3% (25.0%–30.0%) |
+| Cosine retrieval + safety net — rejected | 86.1% (75.0%–95.8%) | 3.3 (1–6) | 71.7% (50.0%–90.0%) | 28.3% (25.0%–30.0%) |
+
+*Mean over seeds, min–max in parentheses. Safety net on the ticket text alone: fires on 15/52 tickets, catches 15/19 billing/security/sales tickets, 0 false hits. Full report: [EVALUATION.md](EVALUATION.md).*
+<!-- eval:end -->
+
+What the numbers say, generated from the same run:
+
+<!-- eval-notes:start -->
+- **Cosine similarity is the wrong retrieval signal; rejected.** Swapping the model's self-reported retrieval score for the search's own cosine similarity lowered must-escalate recall from 93.1% to 86.1% and raised unsafe auto-resolves from 1.7 to 3.3 per run. As a ranking signal, cosine alone (AURC 0.393) does worse than no ranking at all (0.354). Similarity measures whether a ticket is on-topic for the docs, not whether the docs can resolve it. Production keeps the model's score.
+- **The safety net works, but this model didn't need it.** On the ticket text alone it fires on 15/52 tickets, catches 15/19 gold billing/security/sales tickets and makes 0 false hits. It changed 0 routing decisions, because the model had already labeled every one of those tickets correctly. Shipped as a free backstop for a model that mislabels; its misses are the deliberately disguised hard cases.
+- **The "bug reports always escalate" rule barely fires.** Only 5 of 21 bug-report runs were labeled `bug_report`; most were filed as `technical_api_error` and reached a human only through low confidence. Category rules are only as good as the classifier.
+- **Exacto routing helps the same model finish.** On `openai/gpt-oss-120b`, completion went from 77.5% to 95.0% (Fisher p = 0.048) at 7.2× lower cost per ticket; the must-escalate recall difference is not significant (p = 1.00).
+<!-- eval-notes:end -->
+
+The cosine result is the one I'd lead with in an interview. It was my own idea,
+it sounded strictly better on paper, and the labeled eval showed it was worse,
+so it didn't ship. The safety net did ship despite moving zero decisions,
+because its cost is zero and its job is the model you haven't evaluated yet.
+
 ## What I deliberately didn't decide
 
 Three separate moments in this process were about recognizing a decision
@@ -236,11 +316,19 @@ building it, not just the code.
 | 9 | Audit | Confidence threshold and escalation-category list each duplicated across two files | Single source of truth for both |
 | 10 | Audit | Confidence formula had no empirical validation against real human review decisions | Reviewer-overturn calibration metric added |
 | 11 | Audit | `npm audit` findings undercounted (12 actual vs. 3 reported) | Full reachability analysis on both clusters, documented as accepted risk |
-| 12 | Paid rerun | `submit_resolution` JSON truncated mid-payload on one ticket, likely `max_tokens` | Documented, targeted for a follow-up fix |
+| 12 | Paid rerun | `submit_resolution` JSON truncated mid-payload on one ticket, likely `max_tokens` | `max_tokens` raised 2048 → 4096 |
+| 13 | Evaluation | The doc index's embedding model was retired upstream (HTTP 410), silently breaking every search, production included | Re-embedded on a live model at the same 2048 dims; model choice now documented as a hard dependency |
+| 14 | Evaluation | Exact vector scan hits the Postgres statement timeout under concurrent load, so the agent got error strings instead of docs | Search retries in production; `0006` migration adds an indexable `halfvec` column; eval searches an in-memory copy |
+| 15 | Evaluation | Half of a first eval batch had silently failed searches; scoring them would have measured the database, not the agent | Discarded; every tool error now recorded, failed searches excluded and retried, first valid record wins |
+| 16 | Evaluation | A cosine-similarity retrieval score, my own proposed fix, routed worse than the model's self-report | Rejected on the evidence; production keeps the model's score |
 
 ## What I'd do next
 
-- Raise `max_tokens` and re-verify against finding #12
+- Force `submit_resolution` as soon as the model stops calling tools, instead
+  of only on the last turn — the main remaining source of incomplete runs
+- Apply the `0006` halfvec/HNSW migration and re-check search latency
+- Grow the labeled set and add a second labeler, so intervals tighten and label
+  noise can be measured
 - Use the doc-gap signal as an active feedback loop into documentation planning
 - Track the reviewer-overturn calibration metric over a larger review sample
   as real usage accumulates

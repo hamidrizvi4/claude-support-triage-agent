@@ -21,6 +21,7 @@ import path from "node:path";
 import { getSupabaseAdmin } from "../../src/lib/supabase";
 import { AgentRunError, runAgentDetailed, type Ticket } from "../../src/lib/agent/orchestrator";
 import { loadEvalSet, type EvalSet, type EvalTicket } from "./data";
+import { downloadIndex, indexSize, localSearch, verifyAgainstDb } from "./localIndex";
 
 type Args = { model: string; seeds: number[]; set: EvalSet; concurrency: number; budget: number; out: string; limit: number };
 
@@ -65,8 +66,19 @@ export type RunRecord = {
   completion_tokens: number;
   cost: number;
   latency_ms: number;
-  provider_note?: string;
+  /** Tool calls that errored during the run. */
+  tool_errors: string[];
+  /**
+   * True when a doc search failed: the agent saw an error instead of results,
+   * so the run measures the infrastructure, not the agent. Excluded from
+   * scoring and re-runnable with --retry-infra.
+   */
+  infra: boolean;
 };
+
+// A search failing for infrastructure reasons (DB timeout, network, provider
+// errors) — not the model sending bad arguments, which is agent behaviour.
+const SEARCH_INFRA = /^(search_docs|check_pricing): .*(statement timeout|fetch failed|ECONN|socket|terminated|embeddings error (429|5\d\d))/i;
 
 async function keyRemaining(): Promise<number | null> {
   try {
@@ -88,10 +100,12 @@ async function runOne(t: EvalTicket, model: string, seed: number): Promise<RunRe
   const started = Date.now();
   const base = { ticket_id: t.id, set: t.set, model, seed };
   try {
-    const run = await runAgentDetailed(ticket, { model, seed, log: noopLog });
+    const run = await runAgentDetailed(ticket, { model, seed, log: noopLog, search: localSearch });
     const r = run.resolution;
     return {
       ...base,
+      tool_errors: run.toolErrors,
+      infra: run.toolErrors.some((e) => SEARCH_INFRA.test(e)),
       completed: true,
       error: null,
       category: r.category ?? null,
@@ -109,8 +123,11 @@ async function runOne(t: EvalTicket, model: string, seed: number): Promise<RunRe
     };
   } catch (err) {
     const partial = err instanceof AgentRunError ? err.partial : null;
+    const message = err instanceof Error ? err.message : String(err);
     return {
       ...base,
+      tool_errors: partial?.toolErrors ?? [],
+      infra: /^upstream error/.test(message) || (partial?.toolErrors ?? []).some((e) => SEARCH_INFRA.test(e)),
       completed: false,
       error: (err instanceof Error ? err.message : String(err)).slice(0, 300),
       category: null,
@@ -131,14 +148,28 @@ async function runOne(t: EvalTicket, model: string, seed: number): Promise<RunRe
 
 async function main() {
   const args = parseArgs();
-  const tickets = await loadEvalSet(getSupabaseAdmin(), args.set);
+  const supabase = getSupabaseAdmin();
+  const tickets = await loadEvalSet(supabase, args.set);
+  await downloadIndex(supabase, process.argv.includes("--refresh-index"));
+  console.log(`local index: ${indexSize()} chunks`);
+  if (process.argv.includes("--verify-index")) {
+    for (const v of await verifyAgainstDb(supabase, [
+      "rate limit headers on 429 responses",
+      "prompt caching pricing cache writes",
+      "message batches results retention",
+    ])) {
+      console.log(`  verify "${v.query}": top-5 overlap ${v.overlap}, max |Δsim| ${v.maxDiff}`);
+    }
+  }
   fs.mkdirSync(path.dirname(args.out), { recursive: true });
 
   const done = new Set<string>();
   if (fs.existsSync(args.out)) {
     for (const line of fs.readFileSync(args.out, "utf8").split("\n").filter(Boolean)) {
       const r = JSON.parse(line) as RunRecord;
-      done.add(`${r.ticket_id}#${r.seed}`);
+      const infra = r.infra === true || (!r.completed && /^upstream error/.test(r.error ?? ""));
+      if (infra && process.argv.includes("--retry-infra")) done.delete(`${r.ticket_id}#${r.seed}`);
+      else done.add(`${r.ticket_id}#${r.seed}`);
     }
   }
   const queue = args.seeds

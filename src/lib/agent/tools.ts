@@ -97,12 +97,23 @@ export const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
 async function searchDocChunks(query: string, topK: number) {
   const [queryEmbedding] = await embed([query]);
   const supabase = getSupabaseAdmin();
-  const { data, error } = await supabase.rpc("match_doc_chunks", {
-    query_embedding: queryEmbedding,
-    match_count: topK,
-  });
-  if (error) throw new Error(error.message);
-  return { results: data ?? [] };
+  // The search is an exact scan (2048-d vectors exceed pgvector's index
+  // limit), so a busy instance can hit the statement timeout. Retry a couple
+  // of times before surfacing the error to the agent.
+  for (let attempt = 1; ; attempt++) {
+    const { data, error } = await supabase.rpc("match_doc_chunks", {
+      query_embedding: queryEmbedding,
+      match_count: topK,
+    });
+    if (!error) return { results: data ?? [] };
+    if (attempt >= 3 || !/statement timeout/i.test(error.message)) throw new Error(error.message);
+    await new Promise((r) => setTimeout(r, 1000 * attempt));
+  }
+}
+
+/** The query check_pricing runs; shared so an eval search override stays identical. */
+export function pricingQuery(model: string): string {
+  return `${model} pricing cost per token`;
 }
 
 export function searchDocs(query: string, topK = 5) {
@@ -110,7 +121,7 @@ export function searchDocs(query: string, topK = 5) {
 }
 
 export function checkPricing(model: string) {
-  return searchDocChunks(`${model} pricing cost per token`, 3);
+  return searchDocChunks(pricingQuery(model), 3);
 }
 
 export async function checkStatus() {

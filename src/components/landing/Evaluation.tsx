@@ -38,13 +38,29 @@ type Summary = {
   seeds: number[];
   models: string[];
   primary: string;
+  shipped: string;
   dataset: { core: number; hard: number; coreEscalate: number; coreAuto: number };
   perModel: Record<string, { core: SetResult; hard?: SetResult }>;
   exacto?: {
+    seeds: number[];
     base: { model: string; completion: number; escalationRecall: number; cost: number };
     exacto: { model: string; completion: number; escalationRecall: number; cost: number };
     completionP: number;
     escalationRecallP: number;
+  };
+  findings: {
+    cosine: {
+      recallBefore: number;
+      recallCosine: number;
+      unsafeBefore: number;
+      unsafeCosine: number;
+      aurcModel: number;
+      aurcCosine: number;
+      aurcCosineAlone: number;
+      baseRisk: number;
+    };
+    net: { tickets: number; fires: number; sensitive: number; caught: number; falseHits: number; decisionsChanged: number };
+    bug: { total: number; labeledBug: number };
   };
 };
 
@@ -61,8 +77,8 @@ const SHORT: Record<string, string> = {
   bug_report: "Bug",
 };
 const SIGNAL_COLOR: Record<string, string> = {
-  blend_cosine: "var(--resolve)",
-  blend_model: "var(--escalate)",
+  blend_cosine: "var(--escalate)",
+  blend_model: "var(--resolve)",
   cosine: "#3E6E9E",
   certainty: "var(--text-tertiary)",
   model_retrieval: "var(--critical)",
@@ -72,7 +88,7 @@ function RangeNote({ r, asPct = true }: { r: Range; asPct?: boolean }) {
   if (r.min === r.max) return <span className={styles.evalRange}>same on every seed</span>;
   return (
     <span className={styles.evalRange}>
-      seeds: {asPct ? pct(r.min) : r.min}–{asPct ? pct(r.max) : r.max}
+      across seeds: {asPct ? pct(r.min) : r.min}–{asPct ? pct(r.max) : r.max}
     </span>
   );
 }
@@ -190,13 +206,12 @@ function CategoryHeatmap({ cm }: { cm: SetResult["categoryConfusion"] }) {
 export function Evaluation() {
   if (summary.status !== "complete") return null;
   const core = summary.perModel[summary.primary].core;
-  const before = core.variants.find((v) => v.key === "before")!;
-  const after = core.variants.find((v) => v.key === "after")!;
+  const shipped = core.variants.find((v) => v.key === summary.shipped)!;
+  const cosine = core.variants.find((v) => v.key === "after")!;
   const rc = core.riskCoverage!;
-  const hard = summary.perModel[summary.primary].hard;
-  const hardBefore = hard?.variants.find((v) => v.key === "before");
-  const hardAfter = hard?.variants.find((v) => v.key === "after");
   const runs = summary.seeds.length;
+  const f = summary.findings;
+  const ex = summary.exacto;
 
   return (
     <>
@@ -204,37 +219,83 @@ export function Evaluation() {
         <div className={styles.evalKpi}>
           <span className={styles.evalLabel}>Must-escalate recall</span>
           <span className={styles.evalValue} style={{ color: "var(--resolve)" }}>
-            {pct(after.escalationRecall.mean, 1)}
+            {pct(shipped.escalationRecall.mean, 1)}
           </span>
-          <span className={styles.evalWas}>was {pct(before.escalationRecall.mean, 1)}</span>
-          <RangeNote r={after.escalationRecall} />
+          <span className={styles.evalWas}>
+            95% CI {pct(shipped.escalationRecallCI[0])}–{pct(shipped.escalationRecallCI[1])}
+          </span>
+          <RangeNote r={shipped.escalationRecall} />
         </div>
         <div className={styles.evalKpi}>
           <span className={styles.evalLabel}>Unsafe auto-resolves per run</span>
-          <span className={styles.evalValue} style={{ color: after.unsafeAutoResolves.mean ? "var(--escalate)" : "var(--resolve)" }}>
-            {after.unsafeAutoResolves.mean.toFixed(1)}
+          <span className={styles.evalValue} style={{ color: shipped.unsafeAutoResolves.mean ? "var(--escalate)" : "var(--resolve)" }}>
+            {shipped.unsafeAutoResolves.mean.toFixed(1)}
           </span>
-          <span className={styles.evalWas}>was {before.unsafeAutoResolves.mean.toFixed(1)}</span>
-          <RangeNote r={after.unsafeAutoResolves} asPct={false} />
+          <span className={styles.evalWas}>of {summary.dataset.coreEscalate} tickets that need a human</span>
+          <RangeNote r={shipped.unsafeAutoResolves} asPct={false} />
         </div>
         <div className={styles.evalKpi}>
           <span className={styles.evalLabel}>Auto-resolve precision</span>
-          <span className={styles.evalValue}>{pct(after.autoResolvePrecision.mean, 1)}</span>
-          <span className={styles.evalWas}>was {pct(before.autoResolvePrecision.mean, 1)}</span>
-          <RangeNote r={after.autoResolvePrecision} />
+          <span className={styles.evalValue}>{pct(shipped.autoResolvePrecision.mean, 1)}</span>
+          <span className={styles.evalWas}>of auto-resolves were docs-answerable</span>
+          <RangeNote r={shipped.autoResolvePrecision} />
         </div>
         <div className={styles.evalKpi}>
-          <span className={styles.evalLabel}>Coverage (auto-resolved)</span>
-          <span className={styles.evalValue}>{pct(after.coverage.mean, 1)}</span>
-          <span className={styles.evalWas}>was {pct(before.coverage.mean, 1)}</span>
-          <RangeNote r={after.coverage} />
+          <span className={styles.evalLabel}>Coverage</span>
+          <span className={styles.evalValue}>{pct(shipped.coverage.mean, 1)}</span>
+          <span className={styles.evalWas}>of all tickets auto-resolved</span>
+          <RangeNote r={shipped.coverage} />
         </div>
       </div>
       <p className={styles.evalFoot}>
-        <code>{summary.primary}</code> on the {summary.dataset.core} hand-labeled tickets × {runs} seeds. Before: the model&apos;s own
-        retrieval score, no safety net. After: cosine retrieval + safety net. Incomplete runs count as escalated, as they are in
-        production.
+        The shipped routing, <code>{summary.primary}</code>, on the {summary.dataset.core} hand-labeled tickets × {runs} seeds. Incomplete runs
+        count as escalated, as they are in production.
       </p>
+
+      <div className={styles.evalTwo}>
+        <div className={styles.about}>
+          <h3>What the experiments showed</h3>
+          <ul className={styles.findings}>
+            <li>
+              <b>Cosine similarity was the wrong retrieval signal, so it was rejected.</b> Replacing the model&apos;s self-reported
+              retrieval score with the search&apos;s own similarity dropped must-escalate recall from {pct(f.cosine.recallBefore, 1)} to{" "}
+              {pct(f.cosine.recallCosine, 1)}. Ranked alone, cosine did worse than no ranking at all. Similarity says a ticket is on-topic,
+              not that the docs can resolve it.
+            </li>
+            <li>
+              <b>The safety net works, but this model didn&apos;t need it.</b> On the text alone it catches {f.net.caught} of{" "}
+              {f.net.sensitive} billing, security and sales tickets with {f.net.falseHits} false hits, but it changed{" "}
+              {f.net.decisionsChanged} decisions: the model had already labeled those tickets correctly. It ships as a free backstop.
+            </li>
+            <li>
+              <b>&ldquo;Bug reports always escalate&rdquo; barely fires.</b> Only {f.bug.labeledBug} of {f.bug.total} bug-report runs
+              were labeled as bugs. The rest reached a human through low confidence, not the rule.
+            </li>
+            {ex && (
+              <li>
+                <b>Exacto routing helps the same model finish.</b> On <code>{ex.base.model}</code>, completion rose from{" "}
+                {pct(ex.base.completion)} to {pct(ex.exacto.completion)} (p = {ex.completionP.toFixed(2)}) at{" "}
+                {(ex.base.cost / ex.exacto.cost).toFixed(0)}× lower cost per ticket.
+              </li>
+            )}
+          </ul>
+        </div>
+        <div className={styles.card}>
+          <div className={styles.payloadHead}>
+            <span>four routing arms · same runs</span>
+            <span>recall · unsafe/run</span>
+          </div>
+          <ul className={styles.arms}>
+            {core.variants.map((v) => (
+              <li key={v.key} className={v.key === summary.shipped ? styles.armShipped : v.key.startsWith("cosine") || v.key === "after" ? styles.armRejected : ""}>
+                <span>{v.label}</span>
+                <b>{pct(v.escalationRecall.mean, 1)}</b>
+                <b>{v.unsafeAutoResolves.mean.toFixed(1)}</b>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
 
       <div className={styles.evalTwo}>
         <div className={styles.card}>
@@ -249,9 +310,9 @@ export function Evaluation() {
         <div className={styles.about}>
           <h3>Which signal should gate automation?</h3>
           <p>
-            Sort the tickets a threshold could auto-resolve by each signal, then automate from the top. Risk is the share of
-            automated tickets that needed a human. A good signal keeps risk flat as coverage grows. AURC is the area under that
-            curve: a perfect ranking scores {rc.optimalAurc.toFixed(3)}.
+            Sort the tickets a threshold could auto-resolve by each signal, then automate from the top. Risk is the share of automated
+            tickets that needed a human. A good signal keeps risk flat as coverage grows. AURC is the area under that curve: a perfect
+            ranking scores {rc.optimalAurc.toFixed(3)}, no ranking about {rc.baseRisk.toFixed(3)}.
           </p>
           <ul className={styles.aurcList}>
             {rc.signals.map((s) => (
@@ -267,14 +328,14 @@ export function Evaluation() {
 
       <div className={styles.evalTwo}>
         <div className={`${styles.card} ${styles.cardPad} ${styles.evalGrids}`}>
-          <RouteGrid title={`Before · pooled over ${runs} seeds`} c={before.pooled} />
-          <RouteGrid title={`After · pooled over ${runs} seeds`} c={after.pooled} />
+          <RouteGrid title={`Shipped · pooled over ${runs} seeds`} c={shipped.pooled} />
+          <RouteGrid title={`Cosine retrieval (rejected) · pooled`} c={cosine.pooled} />
         </div>
         <div className={`${styles.card} ${styles.cardPad}`}>
           <CategoryHeatmap cm={core.categoryConfusion} />
           <p className={styles.evalFoot} style={{ marginTop: "var(--space-4)" }}>
-            Category accuracy {pct(core.categoryAccuracy, 1)}, macro-F1 {core.macroF1.toFixed(2)}. Off-diagonal cells are where the
-            hard category rule alone can&apos;t be trusted.
+            Category accuracy {pct(core.categoryAccuracy, 1)}, macro-F1 {core.macroF1.toFixed(2)}. Off-diagonal cells are where a
+            category rule alone can&apos;t be trusted; the bug row is the clearest case.
           </p>
         </div>
       </div>
@@ -285,29 +346,24 @@ export function Evaluation() {
           <li>
             <b>Labels:</b> all {summary.dataset.core} tickets hand-labeled with a gold category and route (
             {summary.dataset.coreEscalate} need a human, {summary.dataset.coreAuto} are docs-answerable), under a written policy in{" "}
-            <code>evals/labels.json</code>.
+            <code>evals/labels.json</code>. {summary.dataset.hard} disguised or look-alike hard cases are reported separately, because
+            their author also wrote the safety net.
           </li>
           <li>
-            <b>Model:</b> <code>{summary.primary}</code>, picked by a labeled pilot of cheap tool-calling models on routing accuracy,
-            then cost. {runs} seeds per configuration.
+            <b>Model:</b> <code>{summary.primary}</code>, from a labeled pilot of four cheap, recent tool-calling models: the best
+            router whose full run fit the budget. {runs} seeds per arm. All four arms are scored on the same agent runs, so only the
+            routing differs.
           </li>
-          {summary.exacto && (
+          {ex && (
             <li>
-              <b>Same-model check:</b> <code>{summary.exacto.base.model}</code> with and without Exacto routing. Completion{" "}
-              {pct(summary.exacto.base.completion)} vs {pct(summary.exacto.exacto.completion)} (p = {summary.exacto.completionP.toFixed(2)}),
-              must-escalate recall {pct(summary.exacto.base.escalationRecall)} vs {pct(summary.exacto.exacto.escalationRecall)}.
-            </li>
-          )}
-          {hardBefore && hardAfter && (
-            <li>
-              <b>Hard cases:</b> {summary.dataset.hard} disguised or look-alike tickets, reported separately because their author also
-              wrote the safety net. Must-escalate recall {pct(hardBefore.escalationRecall.mean)} → {pct(hardAfter.escalationRecall.mean)}.
+              <b>Same-model check:</b> <code>{ex.base.model}</code> with and without Exacto, seed {ex.seeds.join(", ")}. The headline
+              model has one provider, so Exacto can&apos;t change it; this one has many.
             </li>
           )}
           <li>
-            <b>Caveat:</b> {summary.dataset.core + summary.dataset.hard} tickets is small. Seed ranges and a Wilson interval (
-            {pct(after.escalationRecallCI[0])}–{pct(after.escalationRecallCI[1])} on recall) are reported so nothing looks more
-            precise than it is.
+            <b>Caveats:</b> {summary.dataset.core + summary.dataset.hard} tickets is small, so seed ranges and confidence intervals are
+            shown. Doc search ran on an in-memory copy of the same index, spot-checked identical to the database. The live status
+            page was unreachable from the eval sandbox.
           </li>
         </ul>
       </div>

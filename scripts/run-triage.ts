@@ -9,7 +9,7 @@ import { config } from "dotenv";
 config({ path: ".env.local" });
 import { getSupabaseAdmin } from "../src/lib/supabase";
 import { runAgentDetailed, type Resolution, type Ticket } from "../src/lib/agent/orchestrator";
-import { cosineRetrievalScore, routeTicket, type Route } from "../src/lib/agent/routing";
+import { routeTicket, type Route } from "../src/lib/agent/routing";
 
 type TicketRow = Ticket & { category: string };
 
@@ -106,11 +106,11 @@ async function main() {
     try {
       const run = await runAgentDetailed(ticket);
       resolution = run.resolution;
-      // Retrieval comes from the vector search's own cosine similarities, not
-      // the model's opinion of them (that opinion stays in the tool_calls log,
-      // as submit_resolution's input). The safety net re-checks the ticket text
-      // for the always-escalate categories, independent of the model's label.
-      resolution.retrieval_score = cosineRetrievalScore(run.similarities);
+      // Retrieval stays the model's own score: the labeled eval tested replacing
+      // it with the search's cosine similarity and that routed worse (lower
+      // must-escalate recall, worse risk-coverage). See docs/EVALUATION.md.
+      // The safety net re-checks the ticket text for the always-escalate
+      // categories, independent of the model's label.
       decision = routeTicket({
         category: resolution.category,
         retrievalScore: resolution.retrieval_score,

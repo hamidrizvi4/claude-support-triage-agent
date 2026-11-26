@@ -52,16 +52,21 @@ export function routeTicket(input: {
 }
 
 /**
- * Retrieval score from the vector search itself, instead of the model's own
- * opinion of its search results: the best cosine similarity any search_docs /
- * check_pricing call returned, rescaled from the band where this corpus's
- * similarities actually live onto 0–1 so the 0.6/0.4 blend and the 0.8
- * threshold still mean something. FLOOR/CEIL come from the unlabeled
- * distribution of best-match similarities in the eval (≈ its 10th / 90th
- * percentiles), never from the labels.
+ * EVALUATED AND REJECTED for production routing — kept because the eval
+ * scores it as one arm. A retrieval score from the vector search itself: the
+ * best cosine similarity any search_docs / check_pricing call returned,
+ * rescaled from the band where this corpus's similarities live (FLOOR/CEIL =
+ * the 10th / 90th percentiles of best-match similarity across the eval runs,
+ * set without labels) onto 0–1.
+ *
+ * It routed worse than the model's self-reported score: lower must-escalate
+ * recall and a worse risk-coverage curve. Similarity measures whether a
+ * ticket is on-topic for the docs, not whether the docs can resolve it — a
+ * billing dispute about the API sits very close to the API docs. See
+ * docs/EVALUATION.md.
  */
-export const COSINE_FLOOR = 0.3;
-export const COSINE_CEIL = 0.7;
+export const COSINE_FLOOR = 0.81;
+export const COSINE_CEIL = 0.92;
 
 export function cosineRetrievalScore(similarities: number[], floor = COSINE_FLOOR, ceil = COSINE_CEIL): number {
   const finite = similarities.filter((s) => Number.isFinite(s));

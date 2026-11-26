@@ -6,7 +6,7 @@
 import OpenAI from "openai";
 import { getSupabaseAdmin } from "../supabase";
 import { resolveModel } from "../model";
-import { TOOLS, searchDocs, checkStatus, checkPricing, lookupAccount } from "./tools";
+import { TOOLS, searchDocs, checkStatus, checkPricing, lookupAccount, pricingQuery } from "./tools";
 
 // Defaults to the free model per CLAUDE.md. Override with OPENROUTER_MODEL
 // (same pattern as scripts/generate-tickets.ts) for a paid run — e.g. a
@@ -67,6 +67,12 @@ export type AgentOptions = {
   seed?: number;
   /** Where tool calls are recorded; defaults to the tool_calls table. */
   log?: ToolLogger;
+  /**
+   * Replaces the doc search behind search_docs and check_pricing (same query,
+   * same top_k). The eval uses an in-memory copy of the same index so a busy
+   * database can't masquerade as agent behaviour.
+   */
+  search?: (query: string, topK: number) => Promise<unknown>;
 };
 
 export type AgentUsage = { promptTokens: number; completionTokens: number; cost: number };
@@ -79,6 +85,8 @@ export type AgentRun = {
   usage: AgentUsage;
   turns: number;
   tools: string[];
+  /** Tool calls that errored ("tool: message"); the agent saw the error text instead of a result. */
+  toolErrors: string[];
 };
 
 /** Thrown when a run ends without a usable resolution; still carries what the run cost. */
@@ -103,12 +111,15 @@ async function logToolCall(ticketId: string, toolName: string, input: unknown, o
   if (error) console.error(`  ! failed to log tool_call ${toolName}: ${error.message}`);
 }
 
-const HANDLERS: Record<string, (input: Record<string, unknown>) => Promise<unknown>> = {
-  search_docs: (input) => searchDocs(input.query as string, (input.top_k as number) ?? 5),
-  check_status: () => checkStatus(),
-  check_pricing: (input) => checkPricing(input.model as string),
-  lookup_account: (input) => lookupAccount(input.account_id as string),
-};
+function handlers(search?: AgentOptions["search"]): Record<string, (input: Record<string, unknown>) => Promise<unknown>> {
+  return {
+    search_docs: (input) =>
+      search ? search(input.query as string, (input.top_k as number) ?? 5) : searchDocs(input.query as string, (input.top_k as number) ?? 5),
+    check_status: () => checkStatus(),
+    check_pricing: (input) => (search ? search(pricingQuery(input.model as string), 3) : checkPricing(input.model as string)),
+    lookup_account: (input) => lookupAccount(input.account_id as string),
+  };
+}
 
 export async function runAgent(ticket: Ticket): Promise<Resolution> {
   return (await runAgentDetailed(ticket)).resolution;
@@ -120,9 +131,11 @@ export async function runAgentDetailed(ticket: Ticket, opts: AgentOptions = {}):
   const log = opts.log ?? logToolCall;
   const similarities: number[] = [];
   const tools: string[] = [];
+  const toolErrors: string[] = [];
+  const HANDLERS = handlers(opts.search);
   const usage: AgentUsage = { promptTokens: 0, completionTokens: 0, cost: 0 };
   let turns = 0;
-  const fail = (message: string) => new AgentRunError(message, { similarities, usage, turns, tools });
+  const fail = (message: string) => new AgentRunError(message, { similarities, usage, turns, tools, toolErrors });
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: SYSTEM_PROMPT },
     {
@@ -184,7 +197,7 @@ export async function runAgentDetailed(ticket: Ticket, opts: AgentOptions = {}):
       args.retrieval_score = coerceScore(args.retrieval_score);
       args.self_certainty = coerceScore(args.self_certainty);
       await log(ticket.id, "submit_resolution", args, null);
-      return { resolution: args, similarities, usage, turns, tools };
+      return { resolution: args, similarities, usage, turns, tools, toolErrors };
     }
 
     if (toolCalls.length === 0) break;
@@ -202,6 +215,7 @@ export async function runAgentDetailed(ticket: Ticket, opts: AgentOptions = {}):
         messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(output) });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        toolErrors.push(`${call.function.name}: ${message}`.slice(0, 200));
         await log(ticket.id, call.function.name, input, { error: message });
         messages.push({ role: "tool", tool_call_id: call.id, content: message });
       }
