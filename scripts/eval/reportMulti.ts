@@ -15,7 +15,7 @@ import path from "node:path";
 import { getSupabaseAdmin } from "../../src/lib/supabase";
 import { applyChecker, parseCheckerReview } from "../../src/lib/agent/guardrails";
 import type { Route } from "../../src/lib/agent/routing";
-import { clusterBootstrap } from "./metrics";
+import { clusterBootstrap, wilson } from "./metrics";
 import { loadEvalSet, type EvalTicket } from "./data";
 import type { RunRecord } from "./run";
 import { JUDGE_MODEL } from "./judge";
@@ -62,6 +62,8 @@ type Arm = {
   completion: number;
   recall: number;
   recallCI: number[];
+  /** "bootstrap", or "wilson-tickets" when every resample had zero misses (a [1, 1] bootstrap reads as false certainty). */
+  recallCIMethod: string;
   unsafePerRun: number;
   coverage: number;
   autoPrecision: number;
@@ -79,7 +81,16 @@ function summarize(key: string, label: string, set: "core" | "hard", rows: Row[]
     return g.length ? g.filter((x) => x.route.status === "escalated").length / g.length : NaN;
   };
   const autoOf = (xs: Row[]) => xs.filter((x) => x.route.status === "auto_resolved");
-  const ci = clusterBootstrap([...groupBy(rows, (x) => x.r.ticket_id).values()], (cs) => recallOf(cs.flat()));
+  let ci = clusterBootstrap([...groupBy(rows, (x) => x.r.ticket_id).values()], (cs) => recallOf(cs.flat()));
+  let recallCIMethod = "bootstrap";
+  if (ci[0] === ci[1]) {
+    // Degenerate: no resample can show a miss that never happened. Fall back to
+    // a conservative ticket-level Wilson interval: of the needs-a-human
+    // tickets, how many were escalated on every run.
+    const byT = [...groupBy(rows.filter((x) => x.gold), (x) => x.r.ticket_id).values()];
+    ci = wilson(byT.filter((xs) => xs.every((x) => x.route.status === "escalated")).length, byT.length);
+    recallCIMethod = "wilson-tickets";
+  }
   const checked = rows.filter((x) => x.checked);
   return {
     key,
@@ -90,6 +101,7 @@ function summarize(key: string, label: string, set: "core" | "hard", rows: Row[]
     completion: r3(rows.filter((x) => x.r.completed).length / Math.max(1, rows.length)),
     recall: r3(mean(perSeed.map(recallOf))),
     recallCI: ci.map(r3),
+    recallCIMethod,
     unsafePerRun: r3(mean(perSeed.map((xs) => autoOf(xs).filter((x) => x.gold).length))),
     coverage: r3(mean(perSeed.map((xs) => autoOf(xs).length / xs.length))),
     autoPrecision: r3(autoOf(rows).length ? autoOf(rows).filter((x) => !x.gold).length / autoOf(rows).length : NaN),
@@ -312,7 +324,7 @@ async function main() {
     ];
     for (const a of arms.filter((x) => x.set === set))
       lines.push(
-        `| ${a.label} | ${pct(a.recall)} (${pct(a.recallCI[0], 0)}–${pct(a.recallCI[1], 0)}) | ${a.unsafePerRun.toFixed(1)} | ${pct(a.coverage)} | ${Number.isFinite(a.autoPrecision) ? pct(a.autoPrecision) : "—"} | $${a.costPerTicket.toFixed(4)}${extra && a.extraCostPerTicket ? ` (+$${a.extraCostPerTicket.toFixed(5)})` : ""} |`
+        `| ${a.label} | ${pct(a.recall)} (${pct(a.recallCI[0], 0)}–${pct(a.recallCI[1], 0)}${a.recallCIMethod === "wilson-tickets" ? "†" : ""}) | ${a.unsafePerRun.toFixed(1)} | ${pct(a.coverage)} | ${Number.isFinite(a.autoPrecision) ? pct(a.autoPrecision) : "—"} | $${a.costPerTicket.toFixed(4)}${extra && a.extraCostPerTicket ? ` (+$${a.extraCostPerTicket.toFixed(5)})` : ""} |`
       );
     return lines.join("\n");
   };
@@ -336,17 +348,23 @@ async function main() {
   ].join("\n");
 
   const findings = [
-    `- **The independent checker trades coverage for safety.** On the ${c0.runs / c0.seeds} core tickets × ${c0.seeds} seeds, a ${diffChecker.split("/")[1]} checker took must-escalate recall from ${pct(c0.recall)} to ${pct(cd.recall)} ` +
+    `- **The independent checker trades coverage for safety.** On the ${c0.runs / c0.seeds} core tickets × ${c0.seeds} seeds, a ${diffChecker.split("/")[1]} checker took must-escalate recall from ${pct(c0.recall)} to ${pct(cd.recall)}` +
+      `${cd.unsafePerRun === 0 ? ` (no unsafe auto-resolve got through in any of the ${cd.runs} runs; conservative ticket-level 95% lower bound ${pct(cd.recallCI[0])})` : ""} ` +
       `(paired change ${(cp.diff.recall.diff * 100).toFixed(1)} pts, 95% CI ${ciTxt(cp.diff.recall.ci)}) and unsafe auto-resolves from ${c0.unsafePerRun.toFixed(1)} to ${cd.unsafePerRun.toFixed(1)} per run, ` +
       `but coverage fell from ${pct(c0.coverage)} to ${pct(cd.coverage)} (CI ${ciTxt(cp.diff.coverage.ci)}). It caught ${cd.checker?.caught}/${cd.checker?.unsafeProposals} unsafe auto-resolve proposals and blocked ${cd.checker?.falseAlarms}/${cd.checker?.safeProposals} safe ones. ` +
       `Extra cost: $${cd.extraCostPerTicket.toFixed(5)} per ticket.`,
-    `- **A second model family matters more than a second prompt.** The same-model checker (same prompt, ${sameChecker.split("/")[1]}) caught ${cs.checker?.caught}/${cs.checker?.unsafeProposals} unsafe proposals and blocked ${cs.checker?.falseAlarms}/${cs.checker?.safeProposals} safe ones: ` +
-      `recall ${pct(cs.recall)} (paired change ${(cp.same.recall.diff * 100).toFixed(1)} pts, CI ${ciTxt(cp.same.recall.ci)}), coverage ${pct(cs.coverage)}.`,
+    `- **A different model family caught more, and blocked more.** The same-model checker (same prompt, ${sameChecker.split("/")[1]}) caught ${cs.checker?.caught}/${cs.checker?.unsafeProposals} unsafe proposals and blocked ${cs.checker?.falseAlarms}/${cs.checker?.safeProposals} safe ones: ` +
+      `recall ${pct(cs.recall)} (paired change ${(cp.same.recall.diff * 100).toFixed(1)} pts, CI ${ciTxt(cp.same.recall.ci)}), coverage ${pct(cs.coverage)}. ` +
+      `With only ${cd.checker?.unsafeProposals} unsafe proposals to catch, the catch-rate gap is suggestive, not established; the false-alarm gap is the larger effect.`,
     `- **The researcher → writer split cuts unsupported claims.** Graded by ${JUDGE_MODEL} against the evidence each writer actually had, unsupported claims per reply went from ${g.single.all.unsupportedPerReply.toFixed(2)} (single agent) to ${g.split.all.unsupportedPerReply.toFixed(2)} ` +
-      `(paired change ${unsupportedPair.diff.toFixed(2)}, 95% CI ${unsupportedPair.ci[0].toFixed(2)} to ${unsupportedPair.ci[1].toFixed(2)}${excludesZero(unsupportedPair.ci) ? "" : ", not significant"}); replies with any unsupported claim went from ${pct(g.single.all.repliesWithUnsupported)} to ${pct(g.split.all.repliesWithUnsupported)}. ` +
-      `On replies that would actually auto-send: ${g.single.autoResolved.unsupportedPerReply.toFixed(2)} vs ${g.split.autoResolved.unsupportedPerReply.toFixed(2)}.`,
+      `(paired change ${unsupportedPair.diff.toFixed(2)}, 95% CI ${unsupportedPair.ci[0].toFixed(2)} to ${unsupportedPair.ci[1].toFixed(2)}${excludesZero(unsupportedPair.ci) ? "" : ", not significant"}). ` +
+      `Split replies are also shorter (${g.split.all.claimsPerReply.toFixed(1)} vs ${g.single.all.claimsPerReply.toFixed(1)} claims), so the length-fair number is the share of claims unsupported: ${pct(g.single.all.unsupportedShare)} → ${pct(g.split.all.unsupportedShare)}. ` +
+      `On replies that would actually auto-send: ${pct(g.single.autoResolved.unsupportedShare)} → ${pct(g.split.autoResolved.unsupportedShare)}. ` +
+      `It is not zero: ${pct(g.split.all.repliesWithUnsupported)} of split replies still hold at least one unsupported claim, because a citation proves the writer pointed at a passage, not that the passage says what the sentence says.`,
+    `- **Citations to pages never retrieved.** ${g.single.outsideRetrieved} of the single agent's ${g.single.citations} citations point to a URL none of its searches returned; the split's are ${g.split.outsideRetrieved} of ${g.split.citations}, by construction (code builds them from passages actually handed over).`,
     `- **The split's routing.** Must-escalate recall ${pct(s1.recall)} → ${pct(s2.recall)} (paired ${(sp.recall.diff * 100).toFixed(1)} pts, CI ${ciTxt(sp.recall.ci)}), coverage ${pct(s1.coverage)} → ${pct(s2.coverage)} (CI ${ciTxt(sp.coverage.ci)}), ` +
-      `cost $${s1.costPerTicket.toFixed(4)} → $${s2.costPerTicket.toFixed(4)} per ticket. The citation check passed on ${pct(g.split.citationCheckPass)} of completed split replies; ${g.split.groundingEscalations} runs were escalated by the grounding gate.`,
+      `cost $${s1.costPerTicket.toFixed(4)} → $${s2.costPerTicket.toFixed(4)} per ticket. The writer called only ${pct((grounding.split as { writerAnswerable: number }).writerAnswerable)} of tickets fully answerable from the passages it was given, and its certainty dropped with it, ` +
+      `so most unsupported drafts fell below the confidence threshold before the grounding gate was reached; the gate itself changed ${g.split.groundingEscalations} decisions. The citation check passed on ${pct(g.split.citationCheckPass)} of completed split replies.`,
     `- **The judge was checked before it was trusted.** It flagged ${judgeValidation.plantedCaught}/${judgeValidation.planted} planted fabrications and accepted ${judgeValidation.verbatimAccepted}/${judgeValidation.verbatim} sentences copied verbatim from the evidence.`,
     ...(probes
       ? [
@@ -380,6 +398,8 @@ async function main() {
     `### Hard cases (author-written stress test)`,
     ``,
     table(checkerArms, "hard"),
+    ``,
+    `† No miss in any run, so the bootstrap interval collapses to 100–100%. Shown instead: a conservative ticket-level Wilson interval (needs-a-human tickets escalated on every run).`,
     ``,
     `## 2. Researcher → writer split`,
     ``,

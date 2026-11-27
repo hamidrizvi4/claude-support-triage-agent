@@ -56,8 +56,7 @@ export const GUARDRAILS = [
   { k: "Least privilege", t: "Tools only where needed", b: "The researcher can search and nothing else. The writer and the checker have no tools at all.", w: "split.ts" },
   { k: "Input fencing", t: "Tickets are data, not instructions", b: "Ticket and doc text is fenced and length-capped. Attempts to close the fence are neutralised before any prompt sees them.", w: "fenceUntrusted()" },
   { k: "Deterministic grounding", t: "Every claim cites a passage", b: "Code checks that each claim sentence cites a passage the writer was actually given. Any gap escalates.", w: "checkCitations()" },
-  { k: "Bounded compute", t: "Timeouts and token budgets", b: "Per-call timeouts, token ceilings and a capped reasoning budget. Retries happen only on transport errors, never to re-roll an answer.", w: "llm.ts" },
-  { k: "Operations", t: "Audited, switchable, red-teamed", b: "Every checker, researcher and writer call is logged to tool_calls. CHECKER=off is the kill switch. Injection probes carry canaries.", w: "evals/injection-probes.json" },
+  { k: "Operations", t: "Bounded, audited, switchable", b: "Timeouts, token ceilings and a capped reasoning budget; retries only on transport errors. Every call is logged to tool_calls, and CHECKER=off is the kill switch.", w: "llm.ts · run-triage.ts" },
 ];
 
 function CheckerDiagram() {
@@ -69,7 +68,7 @@ function CheckerDiagram() {
         <text x="22" y="54" className={styles.dSub}>subject + body</text>
         <rect x="8" y="150" width="150" height="44" rx="8" className={styles.dNode} />
         <text x="22" y="169" className={styles.dLabel}>router</text>
-        <text x="22" y="184" className={styles.dSub}>proposes auto-resolve</text>
+        <text x="22" y="184" className={styles.dSub}>says: auto-resolve</text>
         <path d="M 158 42 C 200 42, 200 104, 222 104" className={styles.dLine} />
         <path d="M 158 172 C 200 172, 200 116, 222 116" className={styles.dLine} />
         <rect x="222" y="80" width="140" height="60" rx="10" className={styles.dNodeDark} />
@@ -80,7 +79,7 @@ function CheckerDiagram() {
         <path d="M 362 122 C 400 122, 400 168, 430 168" className={styles.dLineEsc} />
         <rect x="430" y="32" width="122" height="40" rx="8" className={styles.dNode} />
         <text x="444" y="49" className={styles.dLabel}>agree</text>
-        <text x="444" y="63" className={styles.dSubLive}>auto-resolve ships</text>
+        <text x="444" y="63" className={styles.dSubLive}>answer ships</text>
         <rect x="430" y="148" width="122" height="40" rx="8" className={styles.dNode} />
         <text x="444" y="165" className={styles.dLabel}>escalate</text>
         <text x="444" y="179" className={styles.dSubEsc}>human reviews</text>
@@ -116,12 +115,12 @@ function SplitDiagram() {
         <path d="M 484 96 L 484 150" className={styles.dLine} />
         <rect x="416" y="150" width="136" height="44" rx="8" className={styles.dNode} />
         <text x="430" y="169" className={styles.dLabel}>router</text>
-        <text x="430" y="184" className={styles.dSub}>same rules as before</text>
+        <text x="430" y="184" className={styles.dSub}>usual rules</text>
         <path d="M 416 74 C 360 140, 260 160, 196 172" className={styles.dLineEsc} />
         <rect x="64" y="150" width="132" height="44" rx="8" className={styles.dNode} />
         <text x="78" y="169" className={styles.dLabel}>escalate</text>
-        <text x="78" y="184" className={styles.dSubEsc}>uncited claim · bad id</text>
-        <text x="276" y="132" textAnchor="middle" className={styles.dSub}>each sentence: claim [P2] or framing</text>
+        <text x="78" y="184" className={styles.dSubEsc}>uncited · bad id</text>
+        <text x="276" y="24" textAnchor="middle" className={styles.dSub}>each sentence: claim [P2] or framing</text>
         <text x="280" y="232" textAnchor="middle" className={styles.dSub}>writer can also say &ldquo;not answerable&rdquo; → escalate</text>
       </svg>
     </div>
@@ -225,7 +224,7 @@ export function MultiAgent() {
             Run with the same prompt on the router&apos;s own model family, the checker caught {same.checker?.caught} of{" "}
             {same.checker?.unsafeProposals} unsafe proposals; on a different family it caught {diff.checker?.caught}.{" "}
             {(diff.checker?.caught ?? 0) > (same.checker?.caught ?? 0)
-              ? "A reviewer that shares the router's blind spots tends to agree with it. "
+              ? "That fits a reviewer that shares the router's blind spots agreeing with it, though five cases can't settle it. "
               : "Here, model diversity did not buy extra catches. "}
             The cost side: the different-model checker blocked {diff.checker?.falseAlarms} of {diff.checker?.safeProposals} safe
             auto-resolves, the same-model one {same.checker?.falseAlarms}. Fewer wrong answers sent means more tickets a human
@@ -274,12 +273,12 @@ export function MultiAgent() {
           </span>
         </div>
         <div className={styles.evalKpi}>
-          <span className={styles.evalLabel}>Must-escalate recall · coverage</span>
+          <span className={styles.evalLabel}>Must-escalate recall</span>
           <span className={styles.evalValue}>{pct(split.recall)}</span>
-          <span className={styles.evalWas}>
-            single {pct(single.recall)} · coverage {pct(split.coverage, 0)} vs {pct(single.coverage, 0)}
+          <span className={styles.evalWas}>single agent {pct(single.recall)}</span>
+          <span className={styles.evalRange}>
+            coverage {pct(split.coverage, 0)} vs {pct(single.coverage, 0)} · core set
           </span>
-          <span className={styles.evalRange}>core set, {split.seeds} seeds each</span>
         </div>
         <div className={styles.evalKpi}>
           <span className={styles.evalLabel}>Cost per ticket</span>
@@ -313,7 +312,7 @@ export function MultiAgent() {
         <h4>Methodology</h4>
         <ul className={styles.methodList}>
           <li>
-            <b>Checker:</b> scored on the main evaluation&apos;s recorded runs. It needs only the ticket and the proposed route, so
+            <b>Checker:</b>{" "}scored on the main evaluation&apos;s recorded runs. It needs only the ticket and the proposed route, so
             the router&apos;s outputs are reused unchanged and every difference between arms is the checker&apos;s.
           </li>
           <li>
@@ -329,7 +328,7 @@ export function MultiAgent() {
             </li>
           )}
           <li>
-            <b>Caveats:</b> {tickets} core tickets is small and one labeler wrote the labels. The judge is an LLM, validated but
+            <b>Caveats:</b> {tickets}{" "}core tickets is small and one labeler wrote the labels. The judge is an LLM, validated but
             not perfect. The writer call has a capped reasoning budget the single agent doesn&apos;t. Total spend for this section:
             ${m.spend.total.toFixed(2)}. Full tables in <code>docs/MULTI_AGENT.md</code>.
           </li>
