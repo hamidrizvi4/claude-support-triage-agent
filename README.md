@@ -96,6 +96,50 @@ on the same agent runs; the one marked *shipped* is what production runs.
 - **Exacto routing helps the same model finish.** On `openai/gpt-oss-120b`, completion went from 77.5% to 95.0% (Fisher p = 0.048) at 7.2× lower cost per ticket; the must-escalate recall difference is not significant (p = 0.67).
 <!-- eval-notes:end -->
 
+## Multi-agent: an independent checker and a researcher/writer split
+
+Two additions, each measured on the same labeled tickets
+([docs/MULTI_AGENT.md](docs/MULTI_AGENT.md)):
+
+- **Router + independent checker.** Before an auto-resolve ships, a second
+  agent on a different model family sees *only* the ticket and the proposed
+  route. It has no tools and can only answer `agree` or `escalate`; code
+  applies the verdict and fails closed. A second model can only make things
+  safer — the eval measures what that costs.
+- **Researcher → writer.** One agent only searches and hands over passages;
+  a second writes the reply from those passages alone and cites one for every
+  claim. Code checks each citation against what was actually handed over, and
+  an uncited claim or a "the docs don't cover this" sends the ticket to a
+  human. Measured with an LLM judge from a third model family, validated on
+  planted fabrications first.
+
+In `npm run run-triage`, the checker is **on by default** (`CHECKER=off` is the
+kill switch; `CHECKER_MODEL=qwen/qwen3.7-flash` is the gentler same-model
+option, see the coverage numbers below), and the split is opt-in with
+`-- --pipeline split`. Every checker, researcher and writer call is logged to
+`tool_calls`. The live demo queue still shows the earlier single-agent run.
+
+<!-- multi:start -->
+| qwen/qwen3.7-flash, 40 labeled tickets | Must-escalate recall | Unsafe auto-resolves / run | Coverage | Extra $ / ticket |
+|---|---:|---:|---:|---:|
+| Router alone (shipped) | 93.1% | 1.7 | 26.7% | — |
+| + independent checker (deepseek-v4-flash) | 100.0% | 0.0 | 7.5% | +$0.00005 |
+| + same-model checker | 97.2% | 0.7 | 18.3% | +$0.00003 |
+
+| Grounding (all completed replies, core + hard) | Unsupported claims / reply | Replies with any unsupported claim |
+|---|---:|---:|
+| Single agent | 11.67 | 97.8% |
+| Researcher → writer | 2.15 | 75.7% |
+
+- **The independent checker trades coverage for safety.** On the 40 core tickets × 3 seeds, a deepseek-v4-flash checker took must-escalate recall from 93.1% to 100.0% (no unsafe auto-resolve got through in any of the 120 runs; conservative ticket-level 95% lower bound 86.2%) (paired change 6.9 pts, 95% CI 1.3 to 14.3 pts) and unsafe auto-resolves from 1.7 to 0.0 per run, but coverage fell from 26.7% to 7.5% (CI -28.4 to -10.8 pts). It caught 5/5 unsafe auto-resolve proposals and blocked 18/27 safe ones. Extra cost: $0.00005 per ticket.
+- **A different model family caught more, and blocked more.** The same-model checker (same prompt, qwen3.7-flash) caught 3/5 unsafe proposals and blocked 7/27 safe ones: recall 97.2% (paired change 4.2 pts, CI 0.0 to 11.1 pts), coverage 18.3%. With only 5 unsafe proposals to catch, the catch-rate gap is suggestive, not established; the false-alarm gap is the larger effect.
+- **The researcher → writer split cuts unsupported claims.** Graded by openai/gpt-6-luna against the evidence each writer actually had, unsupported claims per reply went from 11.67 (single agent) to 2.15 (paired change -9.58, 95% CI -10.90 to -8.27). Split replies are also shorter (9.0 vs 20.3 claims), so the length-fair number is the share of claims unsupported: 57.5% → 24.0%. On replies that would actually auto-send: 50.6% → 13.2%. It is not zero: 75.7% of split replies still hold at least one unsupported claim, because a citation proves the writer pointed at a passage, not that the passage says what the sentence says.
+- **Citations to pages never retrieved.** 9 of the single agent's 264 citations point to a URL none of its searches returned; the split's are 0 of 334, by construction (code builds them from passages actually handed over).
+- **The split's routing.** Must-escalate recall 89.6% → 97.9% (paired 8.3 pts, CI 0.0 to 19.0 pts), coverage 31.3% → 10.0% (CI -33.7 to -8.8 pts), cost $0.0017 → $0.0022 per ticket. The writer called only 33.0% of tickets fully answerable from the passages it was given, and its certainty dropped with it, so most unsupported drafts fell below the confidence threshold before the grounding gate was reached; the gate itself changed 3 decisions. The citation check passed on 58.3% of completed split replies.
+- **The judge was checked before it was trusted.** It flagged 12/12 planted fabrications and accepted 10/10 sentences copied verbatim from the evidence.
+- **Prompt-injection probes (6).** Escalated with no canary leak: single agent 5/6, with checker 6/6; split 6/6, with checker 6/6. The checker alone, shown each probe as a proposed auto-resolve, escalated 6/6. Canary leaks in any draft: 0.
+<!-- multi:end -->
+
 ## Architecture
 
 ```
@@ -291,6 +335,8 @@ OPENROUTER_MODEL=          # optional — defaults to the free model; see Result
 
 ## What's next
 
+- Run the checker's own seeds, so its run-to-run variance is measured, and
+  tune its prompt against coverage on a held-out split rather than the eval set.
 - Grow the labeled set past 52 tickets and add a second labeler, so the
   evaluation's intervals tighten and label noise can be measured.
 - Feed the doc-gap signal (tickets with the weakest retrieval match) into an

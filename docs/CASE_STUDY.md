@@ -282,6 +282,63 @@ estimate pointed the wrong way, though 40 tickets can't make any one gap
 significant. With no evidence it helps, it didn't ship. The safety net did ship despite moving zero decisions,
 because its cost is zero and its job is the model you haven't evaluated yet.
 
+## Multi-agent: a checker that can only say no, and a writer that must cite
+
+The evaluation left two honest weaknesses: an unsafe auto-resolve still got
+through about 1.7 times per 40-ticket run, and nothing measured whether the
+drafts were *true to the docs*. Each got its own second agent, and each was
+held to the same rule the rest of the system follows: the model reads, code
+decides.
+
+**Router + independent checker.** When the router proposes an auto-resolve, a
+second agent reviews it before it ships. It sees only the ticket and the
+proposed route, not the draft, the tool calls or the router's scores, so it
+has nothing to anchor on. It runs a different prompt on a different model
+family, has no tools, and can answer only `agree` or `escalate` through one
+forced, schema-checked call. Code applies the verdict with a function that can
+only make a route more cautious, and anything else (a timeout, a refusal, a
+malformed answer) escalates. Because the checker needs nothing but the ticket
+and the route, it could be scored on the main evaluation's recorded runs, so
+every difference between arms is the checker's.
+
+**Researcher → writer.** One agent can only search; it hands over passage ids
+and rates how well they cover the ticket. A second agent, with no tools, writes
+the reply from those passages alone and tags every sentence as a claim (with
+the passages behind it) or framing. Code checks each citation against what was
+actually handed over. Hallucination was measured directly: a third model family
+broke each reply into atomic claims and graded them against the evidence its
+writer had. That judge was itself tested first, on planted fabrications and on
+sentences copied verbatim from the docs, and the first version of the judge
+was thrown out when a suspiciously harsh score turned out to be my bug: it was
+seeing only part of the single agent's evidence.
+
+Both additions are safer, and both cost coverage, which the eval puts a number
+on rather than hiding. The guardrails are the industry-standard set, each one
+in code with a test: monotone authority, fail-closed defaults, strict schemas,
+least-privilege tools, fenced untrusted input, deterministic grounding checks,
+bounded compute, an audit trail, a kill switch, and a prompt-injection red team.
+
+<!-- multi:start -->
+| qwen/qwen3.7-flash, 40 labeled tickets | Must-escalate recall | Unsafe auto-resolves / run | Coverage | Extra $ / ticket |
+|---|---:|---:|---:|---:|
+| Router alone (shipped) | 93.1% | 1.7 | 26.7% | — |
+| + independent checker (deepseek-v4-flash) | 100.0% | 0.0 | 7.5% | +$0.00005 |
+| + same-model checker | 97.2% | 0.7 | 18.3% | +$0.00003 |
+
+| Grounding (all completed replies, core + hard) | Unsupported claims / reply | Replies with any unsupported claim |
+|---|---:|---:|
+| Single agent | 11.67 | 97.8% |
+| Researcher → writer | 2.15 | 75.7% |
+
+- **The independent checker trades coverage for safety.** On the 40 core tickets × 3 seeds, a deepseek-v4-flash checker took must-escalate recall from 93.1% to 100.0% (no unsafe auto-resolve got through in any of the 120 runs; conservative ticket-level 95% lower bound 86.2%) (paired change 6.9 pts, 95% CI 1.3 to 14.3 pts) and unsafe auto-resolves from 1.7 to 0.0 per run, but coverage fell from 26.7% to 7.5% (CI -28.4 to -10.8 pts). It caught 5/5 unsafe auto-resolve proposals and blocked 18/27 safe ones. Extra cost: $0.00005 per ticket.
+- **A different model family caught more, and blocked more.** The same-model checker (same prompt, qwen3.7-flash) caught 3/5 unsafe proposals and blocked 7/27 safe ones: recall 97.2% (paired change 4.2 pts, CI 0.0 to 11.1 pts), coverage 18.3%. With only 5 unsafe proposals to catch, the catch-rate gap is suggestive, not established; the false-alarm gap is the larger effect.
+- **The researcher → writer split cuts unsupported claims.** Graded by openai/gpt-6-luna against the evidence each writer actually had, unsupported claims per reply went from 11.67 (single agent) to 2.15 (paired change -9.58, 95% CI -10.90 to -8.27). Split replies are also shorter (9.0 vs 20.3 claims), so the length-fair number is the share of claims unsupported: 57.5% → 24.0%. On replies that would actually auto-send: 50.6% → 13.2%. It is not zero: 75.7% of split replies still hold at least one unsupported claim, because a citation proves the writer pointed at a passage, not that the passage says what the sentence says.
+- **Citations to pages never retrieved.** 9 of the single agent's 264 citations point to a URL none of its searches returned; the split's are 0 of 334, by construction (code builds them from passages actually handed over).
+- **The split's routing.** Must-escalate recall 89.6% → 97.9% (paired 8.3 pts, CI 0.0 to 19.0 pts), coverage 31.3% → 10.0% (CI -33.7 to -8.8 pts), cost $0.0017 → $0.0022 per ticket. The writer called only 33.0% of tickets fully answerable from the passages it was given, and its certainty dropped with it, so most unsupported drafts fell below the confidence threshold before the grounding gate was reached; the gate itself changed 3 decisions. The citation check passed on 58.3% of completed split replies.
+- **The judge was checked before it was trusted.** It flagged 12/12 planted fabrications and accepted 10/10 sentences copied verbatim from the evidence.
+- **Prompt-injection probes (6).** Escalated with no canary leak: single agent 5/6, with checker 6/6; split 6/6, with checker 6/6. The checker alone, shown each probe as a proposed auto-resolve, escalated 6/6. Canary leaks in any draft: 0.
+<!-- multi:end -->
+
 ## What I deliberately didn't decide
 
 Three separate moments in this process were about recognizing a decision
@@ -323,6 +380,8 @@ building it, not just the code.
 | 14 | Evaluation | Exact vector scan hits the Postgres statement timeout under concurrent load, so the agent got error strings instead of docs | Search retries in production; `0006` migration adds an indexable `halfvec` column; eval searches an in-memory copy |
 | 15 | Evaluation | Half of a first eval batch had silently failed searches; scoring them would have measured the database, not the agent | Discarded; every tool error now recorded, failed searches excluded and retried, first valid record wins |
 | 16 | Evaluation | A cosine-similarity retrieval score, my own proposed fix, showed no gain over the model's self-report | Rejected on the evidence; production keeps the model's score |
+| 17 | Multi-agent | The writer, a reasoning model, sometimes never made its forced call: it reasoned until `max_tokens` (8,192 tokens of thinking, `finish_reason: length`) | Every single-call agent now has a capped reasoning budget with separate headroom for the answer |
+| 18 | Multi-agent | The judge-validation harness stripped `_` from "verbatim" evidence sentences, turning `invalid_request_error` into a string the docs don't contain; the judge flagged it, correctly | Harness fixed to strip only markdown decoration; validation rerun from scratch |
 
 ## What I'd do next
 

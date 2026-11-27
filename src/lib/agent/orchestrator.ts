@@ -3,8 +3,9 @@
  * submit_resolution (or the turn budget runs out). Every tool call —
  * including submit_resolution itself — is logged to tool_calls.
  */
-import OpenAI from "openai";
+import type OpenAI from "openai";
 import { getSupabaseAdmin } from "../supabase";
+import { openRouter } from "./llm";
 import { resolveModel } from "../model";
 import { TOOLS, searchDocs, checkStatus, checkPricing, lookupAccount, pricingQuery } from "./tools";
 
@@ -52,12 +53,6 @@ export function coerceScore(value: unknown): number {
   return Number(value) || 0;
 }
 
-function getOpenRouterClient() {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  if (!apiKey) throw new Error("OPENROUTER_API_KEY must be set");
-  return new OpenAI({ apiKey, baseURL: "https://openrouter.ai/api/v1" });
-}
-
 export type ToolLogger = (ticketId: string, toolName: string, input: unknown, output: unknown) => Promise<void>;
 
 export type AgentOptions = {
@@ -82,6 +77,8 @@ export type AgentRun = {
   resolution: Resolution;
   /** Every cosine similarity search_docs / check_pricing returned this run. */
   similarities: number[];
+  /** Ids of every doc chunk search returned this run, de-duplicated: the evidence the draft could draw on. */
+  retrieved: string[];
   usage: AgentUsage;
   turns: number;
   tools: string[];
@@ -97,6 +94,12 @@ export class AgentRunError extends Error {
   ) {
     super(message);
   }
+}
+
+function chunkIdsFrom(output: unknown): string[] {
+  const results = (output as { results?: { id?: unknown }[] } | null)?.results;
+  if (!Array.isArray(results)) return [];
+  return results.map((r) => (r?.id == null ? "" : String(r.id))).filter(Boolean);
 }
 
 function similaritiesFrom(output: unknown): number[] {
@@ -126,16 +129,17 @@ export async function runAgent(ticket: Ticket): Promise<Resolution> {
 }
 
 export async function runAgentDetailed(ticket: Ticket, opts: AgentOptions = {}): Promise<AgentRun> {
-  const openai = getOpenRouterClient();
+  const openai = openRouter();
   const model = opts.model ?? resolveModel();
   const log = opts.log ?? logToolCall;
   const similarities: number[] = [];
+  const retrieved: string[] = [];
   const tools: string[] = [];
   const toolErrors: string[] = [];
   const HANDLERS = handlers(opts.search);
   const usage: AgentUsage = { promptTokens: 0, completionTokens: 0, cost: 0 };
   let turns = 0;
-  const fail = (message: string) => new AgentRunError(message, { similarities, usage, turns, tools, toolErrors });
+  const fail = (message: string) => new AgentRunError(message, { similarities, retrieved, usage, turns, tools, toolErrors });
   const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
     { role: "system", content: SYSTEM_PROMPT },
     {
@@ -197,7 +201,7 @@ export async function runAgentDetailed(ticket: Ticket, opts: AgentOptions = {}):
       args.retrieval_score = coerceScore(args.retrieval_score);
       args.self_certainty = coerceScore(args.self_certainty);
       await log(ticket.id, "submit_resolution", args, null);
-      return { resolution: args, similarities, usage, turns, tools, toolErrors };
+      return { resolution: args, similarities, retrieved, usage, turns, tools, toolErrors };
     }
 
     if (toolCalls.length === 0) break;
@@ -211,6 +215,7 @@ export async function runAgentDetailed(ticket: Ticket, opts: AgentOptions = {}):
         if (!handler) throw new Error(`unknown tool ${call.function.name}`);
         const output = await handler(input);
         similarities.push(...similaritiesFrom(output));
+        for (const id of chunkIdsFrom(output)) if (!retrieved.includes(id)) retrieved.push(id);
         await log(ticket.id, call.function.name, input, output);
         messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(output) });
       } catch (err) {
