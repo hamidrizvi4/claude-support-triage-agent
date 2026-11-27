@@ -155,6 +155,10 @@ export function reasonLabel(reason: string | null): string {
     return `Safety net — ${categoryLabel(reason.slice("safety_net:".length))}`;
   }
   if (reason === "low_confidence") return "Low confidence";
+  if (reason === "checker:unavailable") return "Checker unavailable (failed closed)";
+  if (reason.startsWith("checker:")) return `Checker — ${reason.slice("checker:".length).replace(/_/g, " ")}`;
+  if (reason === "unsupported:writer") return "Docs don't support an answer";
+  if (reason === "unsupported:citation_check") return "Failed citation check";
   if (reason.includes("429") || reason.includes("Rate limit")) return "Rate limited";
   if (reason.includes("did not call submit_resolution")) return "No resolution submitted";
   if (reason.startsWith("agent_error:")) return "Agent error";

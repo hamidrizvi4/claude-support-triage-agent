@@ -282,6 +282,13 @@ estimate pointed the wrong way, though 40 tickets can't make any one gap
 significant. With no evidence it helps, it didn't ship. The safety net did ship despite moving zero decisions,
 because its cost is zero and its job is the model you haven't evaluated yet.
 
+## Multi-agent: a checker that can only say no, and a writer that must cite
+
+<!-- multi-prose -->
+
+<!-- multi:start -->
+<!-- multi:end -->
+
 ## What I deliberately didn't decide
 
 Three separate moments in this process were about recognizing a decision
@@ -323,6 +330,8 @@ building it, not just the code.
 | 14 | Evaluation | Exact vector scan hits the Postgres statement timeout under concurrent load, so the agent got error strings instead of docs | Search retries in production; `0006` migration adds an indexable `halfvec` column; eval searches an in-memory copy |
 | 15 | Evaluation | Half of a first eval batch had silently failed searches; scoring them would have measured the database, not the agent | Discarded; every tool error now recorded, failed searches excluded and retried, first valid record wins |
 | 16 | Evaluation | A cosine-similarity retrieval score, my own proposed fix, showed no gain over the model's self-report | Rejected on the evidence; production keeps the model's score |
+| 17 | Multi-agent | The writer, a reasoning model, sometimes never made its forced call: it reasoned until `max_tokens` (8,192 tokens of thinking, `finish_reason: length`) | Every single-call agent now has a capped reasoning budget with separate headroom for the answer |
+| 18 | Multi-agent | The judge-validation harness stripped `_` from "verbatim" evidence sentences, turning `invalid_request_error` into a string the docs don't contain; the judge flagged it, correctly | Harness fixed to strip only markdown decoration; validation rerun from scratch |
 
 ## What I'd do next
 

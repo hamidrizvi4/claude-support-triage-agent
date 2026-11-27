@@ -2362,3 +2362,41 @@
   text-decoration: line-through;
   text-decoration-color: var(--escalate);
 }
+
+/* ── Multi-agent section ─────────────────────────────────── */
+
+.dLabelInv {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  fill: var(--surface);
+}
+
+.dSubInv {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  fill: var(--resolve-tint);
+}
+
+.dSubEsc {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  fill: var(--escalate);
+}
+
+.dLineEsc {
+  fill: none;
+  stroke: var(--escalate);
+  stroke-width: 1.4;
+  stroke-dasharray: 3 4;
+}
+
+.arms3 li {
+  grid-template-columns: minmax(0, 1fr) 58px 34px 40px;
+}
+
+@media (max-width: 640px) {
+  .arms3 li {
+    grid-template-columns: minmax(0, 1fr) 52px 30px 36px;
+    font-size: 12.5px;
+  }
+}

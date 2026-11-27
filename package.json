@@ -15,11 +15,16 @@
     "test:orchestrator": "tsx src/lib/agent/orchestrator.selftest.ts",
     "test:classify": "tsx src/lib/data/classify.selftest.ts",
     "test:drawer-logic": "tsx src/components/drawer/logic.selftest.ts",
-    "test": "npm run test:routing && npm run test:orchestrator && npm run test:classify && npm run test:drawer-logic && npm run test:safety-net && npm run test:eval",
+    "test": "npm run test:routing && npm run test:orchestrator && npm run test:classify && npm run test:drawer-logic && npm run test:safety-net && npm run test:guardrails && npm run test:eval",
     "test:safety-net": "tsx src/lib/agent/safetyNet.selftest.ts",
     "test:eval": "tsx scripts/eval/metrics.selftest.ts",
     "eval:run": "tsx scripts/eval/run.ts",
-    "eval:report": "tsx scripts/eval/report.ts"
+    "eval:report": "tsx scripts/eval/report.ts",
+    "test:guardrails": "tsx src/lib/agent/guardrails.selftest.ts",
+    "eval:checker": "tsx scripts/eval/checker.ts",
+    "eval:judge": "tsx scripts/eval/judge.ts",
+    "eval:probes": "tsx scripts/eval/probes.ts",
+    "eval:multi": "tsx scripts/eval/reportMulti.ts"
   },
   "browserslist": [
     "last 2 Chrome versions",

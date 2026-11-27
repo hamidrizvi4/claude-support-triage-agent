@@ -96,6 +96,26 @@ on the same agent runs; the one marked *shipped* is what production runs.
 - **Exacto routing helps the same model finish.** On `openai/gpt-oss-120b`, completion went from 77.5% to 95.0% (Fisher p = 0.048) at 7.2× lower cost per ticket; the must-escalate recall difference is not significant (p = 0.67).
 <!-- eval-notes:end -->
 
+## Multi-agent: an independent checker and a researcher/writer split
+
+Two additions, each measured on the same labeled tickets
+([docs/MULTI_AGENT.md](docs/MULTI_AGENT.md)):
+
+- **Router + independent checker.** Before an auto-resolve ships, a second
+  agent on a different model family sees *only* the ticket and the proposed
+  route. It has no tools and can only answer `agree` or `escalate`; code
+  applies the verdict and fails closed. A second model can only make things
+  safer — the eval measures what that costs.
+- **Researcher → writer.** One agent only searches and hands over passages;
+  a second writes the reply from those passages alone and cites one for every
+  claim. Code checks each citation against what was actually handed over, and
+  an uncited claim or a "the docs don't cover this" sends the ticket to a
+  human. Measured with an LLM judge from a third model family, validated on
+  planted fabrications first.
+
+<!-- multi:start -->
+<!-- multi:end -->
+
 ## Architecture
 
 ```
@@ -291,6 +311,8 @@ OPENROUTER_MODEL=          # optional — defaults to the free model; see Result
 
 ## What's next
 
+- Run the checker's own seeds, so its run-to-run variance is measured, and
+  tune its prompt against coverage on a held-out split rather than the eval set.
 - Grow the labeled set past 52 tickets and add a second labeler, so the
   evaluation's intervals tighten and label noise can be measured.
 - Feed the doc-gap signal (tickets with the weakest retrieval match) into an

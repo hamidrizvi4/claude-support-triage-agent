@@ -187,6 +187,36 @@ OpenRouter model. Not a real issue at $0/token; revisit only if latency matters.
   last turn, the loop ends without forcing `submit_resolution` (most "incomplete"
   runs). Forcing it on the next turn instead would be the cheap fix.
 
+## Multi-agent (checker + researcher/writer) — see docs/MULTI_AGENT.md
+- **Independent checker** (`src/lib/agent/checker.ts`): consulted only when the
+  router proposes an auto-resolve. Sees ticket text + proposed route/category
+  ONLY (no draft, tool calls or scores), different model family by default
+  (`CHECKER_MODEL`, default `deepseek/deepseek-v4-flash`), no tools, one forced
+  `submit_review` call with enum verdict `agree|escalate`. `CHECKER=off` is the
+  kill switch. Wired into `run-triage.ts`, logged to `tool_calls` as `checker_review`.
+- **Researcher → writer** (`src/lib/agent/split.ts`, `run-triage -- --pipeline split`):
+  researcher has `search_docs` only and ends with `submit_evidence` (passage ids
+  + coverage); writer has no tools and returns per-sentence `claim|framing` +
+  passage ids. Routing = usual router with coverage as retrieval score and the
+  writer's certainty, then `applyGrounding()`. Same loop policy as the single
+  agent on purpose, so comparisons measure the split, not a better loop.
+- **All model output goes through `src/lib/agent/guardrails.ts`** (pure,
+  exhaustively self-tested): `applyChecker`/`applyGrounding` can only keep or
+  escalate (monotone), `null` review = escalate (fail closed), strict parsers,
+  `fenceUntrusted()` for ticket/doc text, `checkCitations()` deterministic
+  grounding. Never let a model output change a route except through these.
+- `src/lib/agent/llm.ts` `callForcedTool()`: timeouts, retries only on transport
+  errors, temperature 0, and a **capped reasoning budget** — uncapped, qwen3.7-flash
+  reasoned to `max_tokens` without ever making the forced call.
+- Eval: `eval:run -- --pipeline single|split` (records drafts + evidence to
+  `evals/runs/multi/`, never mixed into the main report), `eval:checker` (reviews
+  recorded runs' auto-resolve proposals), `eval:judge` (`openai/gpt-6-luna`,
+  third model family, measurement only; `--validate` = planted + verbatim
+  probes), `eval:probes` (prompt-injection red team, `evals/injection-probes.json`),
+  `eval:multi` → `evals/results/multiagent.json` (intro page's multi-agent
+  section renders only from it), `docs/MULTI_AGENT.md`, `<!-- multi:start -->`
+  blocks. Never hand-edit those numbers.
+
 ## Confidence & routing formula
 ```
 confidence = 0.6 * retrieval_score + 0.4 * self_certainty

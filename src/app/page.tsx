@@ -5,6 +5,8 @@ import { Walkthrough } from "@/components/landing/Walkthrough";
 import { RoutingLab } from "@/components/landing/RoutingLab";
 import { Results } from "@/components/landing/Results";
 import { Evaluation } from "@/components/landing/Evaluation";
+import { MultiAgent } from "@/components/landing/MultiAgent";
+import multiSummary from "../../evals/results/multiagent.json";
 import evalSummary from "../../evals/results/summary.json";
 import { Reveal } from "@/components/landing/Reveal";
 import {
@@ -143,6 +145,9 @@ export default function IntroPage() {
               <a className={styles.navLink} href="#evaluation">Evaluation</a>
             )}
             <a className={styles.navLink} href="#results">Models</a>
+            {multiSummary.status === "complete" && (
+              <a className={styles.navLink} href="#multi-agent">Multi-agent</a>
+            )}
             <a className={styles.navLink} href="#agent">Agent</a>
             <a className={styles.navLink} href="#walkthrough">Walkthrough</a>
             <a className={styles.navLink} href="#engineering">Engineering</a>
@@ -261,6 +266,20 @@ export default function IntroPage() {
           </p>
           <Results />
         </section>
+
+        {/* ── Multi-agent (only once the multi-agent report exists) ── */}
+        {multiSummary.status === "complete" && (
+          <section className={styles.section} id="multi-agent">
+            <span className={styles.eyebrow}>/multi-agent</span>
+            <h2 className={styles.h2}>Two more agents. Neither can say yes on its own.</h2>
+            <p className={styles.lede}>
+              An independent checker reviews the router&apos;s call before an auto-resolve ships, and a researcher/writer
+              split makes every sentence of a reply cite the docs or go to a human. Code still decides. Both were measured
+              on the same labeled tickets as the evaluation above.
+            </p>
+            <MultiAgent />
+          </section>
+        )}
 
         {/* ── Agent ── */}
         <section className={styles.section} id="agent">

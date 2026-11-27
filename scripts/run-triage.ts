@@ -3,13 +3,30 @@
  * result to draft_responses, updates tickets.status / tickets.confidence,
  * and prints an auto-resolve/escalation summary.
  *
- * Usage: npm run run-triage
+ * Multi-agent options (see docs/MULTI_AGENT.md for the eval behind them):
+ * - Independent checker: when the router proposes an auto-resolve, a second
+ *   agent on a different model (CHECKER_MODEL, default deepseek-v4-flash)
+ *   reviews the ticket and the proposed route and can only agree or escalate.
+ *   On by default; CHECKER=off is the kill switch. Fails closed.
+ * - --pipeline split: researcher (search only) → writer (no tools, must cite
+ *   a retrieved passage for every claim) instead of the single agent.
+ *
+ * Usage: npm run run-triage [-- --pipeline split]
  */
 import { config } from "dotenv";
 config({ path: ".env.local" });
 import { getSupabaseAdmin } from "../src/lib/supabase";
 import { runAgentDetailed, type Resolution, type Ticket } from "../src/lib/agent/orchestrator";
 import { routeTicket, type Route } from "../src/lib/agent/routing";
+import { runSplitPipeline } from "../src/lib/agent/split";
+import { checkerEnabled, reviewRoute } from "../src/lib/agent/checker";
+import { applyChecker } from "../src/lib/agent/guardrails";
+import { resolveModel } from "../src/lib/model";
+
+async function logCall(ticketId: string, toolName: string, input: unknown, output: unknown) {
+  const { error } = await getSupabaseAdmin().from("tool_calls").insert({ ticket_id: ticketId, tool_name: toolName, input, output });
+  if (error) console.error(`  ! failed to log tool_call ${toolName}: ${error.message}`);
+}
 
 type TicketRow = Ticket & { category: string };
 
@@ -81,6 +98,10 @@ async function persist(
 
 async function main() {
   const supabase = getSupabaseAdmin();
+  const argv = process.argv.slice(2);
+  const pipeline = argv.includes("--pipeline") ? argv[argv.indexOf("--pipeline") + 1] : "single";
+  if (pipeline !== "single" && pipeline !== "split") throw new Error("--pipeline must be single or split");
+  console.log(`pipeline=${pipeline} · checker=${checkerEnabled() ? "on" : "off"}`);
   const { data: tickets, error } = await supabase.from("tickets").select("id, subject, body, account_id, category");
   if (error) throw error;
   if (!tickets || tickets.length === 0) {
@@ -104,19 +125,40 @@ async function main() {
     let decision: Route;
     let draftCategory: string | null;
     try {
-      const run = await runAgentDetailed(ticket);
-      resolution = run.resolution;
-      // Retrieval stays the model's own score: the labeled eval tested replacing
-      // it with the search's cosine similarity, and that showed no gain (every
-      // estimate pointed the wrong way, none significant). See docs/EVALUATION.md.
-      // The safety net re-checks the ticket text for the always-escalate
-      // categories, independent of the model's label.
-      decision = routeTicket({
-        category: resolution.category,
-        retrievalScore: resolution.retrieval_score,
-        selfCertainty: resolution.self_certainty,
-        text: `${ticket.subject}\n\n${ticket.body}`,
-      });
+      if (pipeline === "split") {
+        // Researcher → writer; the grounding gate (writer verdict + citation
+        // check) is already applied inside, on top of the usual router.
+        const run = await runSplitPipeline(ticket, { model: resolveModel(), log: logCall });
+        resolution = run.resolution;
+        decision = run.route;
+      } else {
+        const run = await runAgentDetailed(ticket);
+        resolution = run.resolution;
+        // Retrieval stays the model's own score: the labeled eval tested replacing
+        // it with the search's cosine similarity, and that showed no gain (every
+        // estimate pointed the wrong way, none significant). See docs/EVALUATION.md.
+        // The safety net re-checks the ticket text for the always-escalate
+        // categories, independent of the model's label.
+        decision = routeTicket({
+          category: resolution.category,
+          retrievalScore: resolution.retrieval_score,
+          selfCertainty: resolution.self_certainty,
+          text: `${ticket.subject}\n\n${ticket.body}`,
+        });
+      }
+      // Independent checker: only an auto-resolve is reviewed, and the review
+      // can only keep it or escalate. Any failure escalates (fail closed).
+      if (decision.status === "auto_resolved" && checkerEnabled()) {
+        const review = await reviewRoute(ticket, { category: resolution.category });
+        await logCall(ticket.id, "checker_review", { model: review.model, proposed: { route: "auto_resolve", category: resolution.category } }, {
+          verdict: review.review?.verdict ?? null,
+          reason: review.review?.verdict === "escalate" ? review.review.reason : null,
+          note: review.note,
+          error: review.error,
+          cost: review.usage.cost,
+        });
+        decision = applyChecker(decision, review.review);
+      }
       draftCategory = resolution.category;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
